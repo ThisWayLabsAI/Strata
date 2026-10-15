@@ -5,12 +5,31 @@
   const encoder = new TextEncoder(), decoder = new TextDecoder("utf-8", {fatal: true});
   const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   const seedOK = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  function editingSettings(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid editing controls.");
+    const choices = {camera:["front","three-quarter","side","rear","high","low","overhead"], framing:["close","medium","wide","full"],
+      lighting:["soft","overcast","golden","side","rim","high-key","low-key","neon"]};
+    const out = {};
+    for (const key of Object.keys(choices)) {
+      if (value[key] === undefined || value[key] === "") continue;
+      if (!choices[key].includes(value[key])) throw new Error("Invalid " + key + " preset.");
+      out[key] = value[key];
+    }
+    if (value.region !== undefined) {
+      const r = value.region;
+      if (!Array.isArray(r) || r.length !== 4 || r.some(n => typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1) ||
+          r[2] < .01 || r[3] < .01 || r[0] + r[2] > 1.000001 || r[1] + r[3] > 1.000001) throw new Error("Invalid normalized edit region.");
+      out.region = r.map(n => Math.round(n * 100000) / 100000);
+    }
+    return out;
+  }
   function recipe(value) {
     if (!value || value.schema !== SCHEMA || typeof value.prompt !== "string" || !value.prompt.trim() ||
         value.prompt.length > 16384 || !seedOK(value.seed) || typeof value.size !== "string" || !/^\d{1,5}x\d{1,5}$/.test(value.size)) {
       throw new Error("Invalid Strata image recipe (prompt, seed or dimensions).");
     }
     const out = {schema: SCHEMA, prompt: value.prompt, seed: value.seed, size: value.size};
+    if (value.editing !== undefined) out.editing = editingSettings(value.editing);
     if (["generate", "edit"].includes(value.operation)) out.operation = value.operation;
     if (value.references !== undefined) {
       if (!Array.isArray(value.references) || value.references.length > 3 || value.references.some(ref =>
@@ -18,8 +37,8 @@
         typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256))) throw new Error("Invalid reference provenance in PNG recipe.");
       out.references = value.references.map(({name, role, sha256}) => ({name, role, sha256}));
     }
-    for (const key of ["model", "createdAt", "originalPrompt", "templateName", "templatePrompt"]) {
-      if (typeof value[key] === "string" && value[key].length <= (["originalPrompt", "templatePrompt"].includes(key) ? 16384 : 256)) out[key] = value[key];
+    for (const key of ["model", "createdAt", "originalPrompt", "templateName", "templatePrompt", "controlPrompt"]) {
+      if (typeof value[key] === "string" && value[key].length <= (["originalPrompt", "templatePrompt", "controlPrompt"].includes(key) ? 16384 : 256)) out[key] = value[key];
     }
     out.settings = {};
     if (value.settings && Number.isInteger(value.settings.steps) && value.settings.steps >= 1 && value.settings.steps <= 100) out.settings.steps = value.settings.steps;
@@ -156,5 +175,5 @@
     const prefix = lines.length ? lines.join("\n") + "\n\nTemplate treatment:\n" : "";
     return {prompt: prefix + prompt, prefix, basePrompt: prompt};
   }
-  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters, prepareTemplate};
+  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters, prepareTemplate, editingSettings};
 })();

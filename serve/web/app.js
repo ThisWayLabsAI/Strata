@@ -1321,9 +1321,10 @@ function restoreImageSettings(value) {
 function useImageRecipe(value) {
   const metadata = StrataImage.recipe(value);
   appliedImageTemplateContext = null;
-  restoreImageSettings(metadata);
+  restoreImageSettings({...metadata, prompt: metadata.editing && metadata.controlPrompt !== undefined ? metadata.controlPrompt : metadata.prompt});
   imageRecipeInfo(`Loaded prompt, seed and reported settings. Original model: ${metadata.model || "not recorded"}. New images use this server's configured image model.`);
   window.StrataReferences?.restore(metadata);
+  window.StrataImageEditing?.restore(metadata);
   $("img-template").closest("details").open = false;
   showTab("images");
   document.querySelector(".view--images > .about").scrollTop = 0;
@@ -1350,6 +1351,7 @@ function applyImageTemplate(item, subject = "") {
     (item.operation && item.operation !== operation ? ` This template was saved for ${item.operation}; check any manually written instructions.` : "") +
     (item.model ? ` Original model: ${item.model}.` : "");
   appliedImageTemplateContext = {prefix: prepared.prefix, fingerprint: imageTemplateFingerprint(), info};
+  window.StrataImageEditing?.refresh();
   imageRecipeInfo(info);
   $("img-template").closest("details").open = false;
   showTab("images");
@@ -1425,12 +1427,19 @@ renderImageTemplates();
 $("img-form").onsubmit = async (ev) => {
   ev.preventDefault();
   if ($("img-go").disabled) return;
-  const prompt = $("img-prompt").value.trim();
+  let prompt = $("img-prompt").value.trim();
   if (!prompt) return;
   if (prompt.length > 16384) { toast("warn", "Prompt too long", "Use at most 16,384 characters for a reusable image recipe."); return; }
-  const body = {prompt, size: $("img-size").value, response_format: "b64_json"};
   const operation = $("img-operation").value;
-  const references = window.StrataReferences?.request() || [];
+  let references = window.StrataReferences?.request() || [];
+  const controlPrompt = prompt;
+  const templatePrompt = imageTemplateBase(prompt);
+  let editing;
+  try {
+    const prepared = window.StrataImageEditing?.prepare(prompt, references, operation);
+    if (prepared) { prompt = prepared.prompt; references = prepared.references; editing = prepared.editing; }
+  } catch (error) { toast("warn", "Check image controls", error.message, 8000); return; }
+  const body = {prompt, size: $("img-size").value, response_format: "b64_json"};
   if (references.length) body.references = references;
   if (operation === "edit" && !references.length) return;
   if ($("img-steps").value !== "") {
@@ -1439,7 +1448,6 @@ $("img-form").onsubmit = async (ev) => {
     body.steps = steps;
   }
   const templateName = activeImageTemplate;
-  const templatePrompt = imageTemplateBase(prompt);
   if ($("img-seed-mode").value === "fixed") {
     if (!validImageSeed($("img-seed").value)) { $("img-seed").reportValidity(); return; }
     body.seed = Number($("img-seed").value);
@@ -1454,9 +1462,10 @@ $("img-form").onsubmit = async (ev) => {
     for (const d of j.data) {
       const metadata = {schema: StrataImage.SCHEMA, prompt: d.revised_prompt || prompt, seed: d.seed, size: j.size || body.size,
         createdAt: new Date(Number.isFinite(j.created) ? j.created * 1000 : Date.now()).toISOString(), model: j.model,
-        templateName, operation: j.operation, references: j.references,
+        templateName, operation: j.operation, references: j.references, editing,
         settings: {steps: j.strata?.steps ?? body.steps, backend: j.strata?.backend, quant: j.strata?.quant}};
       if (metadata.prompt !== prompt) metadata.originalPrompt = prompt;
+      if (editing) metadata.controlPrompt = controlPrompt;
       if (templatePrompt !== prompt) metadata.templatePrompt = templatePrompt;
       showImageResult(d.b64_json, metadata);
       if (validImageSeed(d.seed)) {

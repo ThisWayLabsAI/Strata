@@ -2,6 +2,14 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Current increment: visual editing controls in Images
+
+`feature/image-edit-controls`, based on stable `008a0f10c98f1c82b71e6984bcba3cc4d77ff07b`, adds optional camera angle, framing/zoom and lighting presets, a final prompt preview, and mouse/touch/keyboard rectangular region marking on source image 1. The draft and original reference bytes are preserved. A separate marked copy uses one reference slot; this is model guidance, not a hard mask or guarantee of unchanged surrounding pixels. No new backend/config/model/dependency is required. [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md) records usage, recipe fields, tested limits and results.
+
+Verification: 22 Node tests, 33 Python image/reference regressions, and 735 Chromium checks across five viewports passed; no browser errors were reported. Real mouse drawing and the mobile view were checked. Hardware testing used the existing live image API, avoiding a second GPU process or interruption to the service. A marked edit successfully replaced a robot head with a green sphere without retaining guide marks; the initial camera/rim sample changed the angle only modestly. A side-profile/neon test produced a clear side view with cyan/magenta illumination and exercised unload policy. Chat returned READY after the edits; no request remained in flight. Endpoint timings and limitations are recorded in the feature document. Record final deployment in the user-facing snapshot. Actual phone interaction and broad model compliance remain unverified.
+
+Preserve `rollback/pre-image-edit-controls-20261015` at `008a0f10c98f1c82b71e6984bcba3cc4d77ff07b`. This is a frontend-only release: deploy assets together and refresh, without restarting live. Do not alter keys, configs, models, launchers or scheduled tasks. Next remains request-owned reference editing in chat, then model switching. The accepted chat-generation release below remains unchanged.
+
 ## Current increment: images directly from chat
 
 Status: deployed and accepted for continued user testing on 2026-10-15. Application commit is `996c3cbf503817d9943614555cff61e1def7fb79`. The user enabled the checkbox, confirmed generation worked, and agreed to move on while continuing testing. See [the decision record](THISWAYLABS_DECISIONS.md). The following earlier-release sections are historical; this section and the next-increment plan take precedence.

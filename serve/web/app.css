@@ -300,3 +300,12 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
 .chat-image-error { color: var(--st-warn-text); }
 .chat-image .img-template-actions { flex-wrap: wrap; }
 .chat-image p { margin: 0; }
+.img-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.img-preset-grid .st-input { min-height: 44px; }
+.img-region-toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.img-region-toggle input { width: 18px; height: 18px; }
+#img-region-canvas { display: block; width: 100%; max-width: 720px; height: auto; touch-action: none; cursor: crosshair; border: 2px solid var(--st-line); border-radius: 6px; margin-block: 12px; }
+#img-region-canvas:focus-visible { outline: 3px solid var(--st-focus); outline-offset: 2px; }
+#img-region-controls:disabled #img-region-canvas { pointer-events: none; opacity: .65; }
+#img-effective-prompt { resize: vertical; max-height: 250px; }
+@media (max-width: 480px) { .img-preset-grid { grid-template-columns: minmax(0, 1fr); } }

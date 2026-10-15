@@ -124,6 +124,28 @@
         <p class="muted small">PNG downloads keep the prompt and seed. Re-saving in another app can remove the recipe.</p>
         <p class="muted small" id="img-recipe-info" hidden></p>
         <textarea class="st-input img-prompt" id="img-prompt" rows="3" maxlength="16384" placeholder="Describe the image&hellip;" aria-label="Prompt"></textarea>
+        <details class="st-collapse" id="img-edit-controls">
+          <summary>Camera, lighting &amp; edit region</summary>
+          <div class="st-collapse__body img-template-body">
+            <fieldset id="img-edit-presets" class="img-preset-grid">
+              <label class="st-field">Camera angle<select class="st-input" id="img-camera"></select></label>
+              <label class="st-field">Framing / zoom<select class="st-input" id="img-framing"></select></label>
+              <label class="st-field">Lighting<select class="st-input" id="img-lighting"></select></label>
+              <button type="button" class="st-btn st-btn--secondary" id="img-preset-reset">Reset presets</button>
+            </fieldset>
+            <p class="muted small">Presets guide a newly generated view; they are not precise 3D camera controls. Changing viewpoint or widening a shot may invent hidden details. Camera and lighting apply to the whole scene.</p>
+            <fieldset id="img-region-controls" disabled>
+              <label class="img-region-toggle"><input type="checkbox" id="img-region-enabled"> Mark an edit region on source image 1</label>
+              <div id="img-region-editor" hidden>
+                <p class="muted small" id="img-region-help">Drag a box with mouse or touch. Keyboard: Enter selects the center; arrows move, Shift + arrows resize. Describe the replacement in Prompt. The original stays intact; a marked guide uses one of the three reference slots. This guides the model, not exact pixel protection.</p>
+                <canvas id="img-region-canvas" width="512" height="512" tabindex="0" role="img" aria-label="Source image region selector" aria-describedby="img-region-help"></canvas>
+                <div class="img-template-actions"><button type="button" class="st-btn st-btn--secondary" id="img-region-center">Select center</button><button type="button" class="st-btn st-btn--secondary" id="img-region-clear">Clear region</button></div>
+              </div>
+            </fieldset>
+            <p class="muted small" id="img-region-status" role="status">Select Edit and upload a source to mark a region.</p>
+            <label class="st-field" id="img-effective-label" hidden>Prompt that will be sent<textarea class="st-input" id="img-effective-prompt" rows="5" readonly></textarea></label>
+          </div>
+        </details>
         <div class="img-seed-toolbar">
           <label class="st-field img-seed-mode-field"><span class="st-label">Seed mode</span>
             <select class="st-input" id="img-seed-mode"><option value="random">Random</option><option value="fixed">Fixed</option></select></label>
@@ -337,5 +359,6 @@
 <script src="web/chat-images.js"></script>
 <script src="web/app.js"></script>
 <script src="web/image-references.js"></script>
+<script src="web/image-edit-controls.js"></script>
 </body>
 </html>

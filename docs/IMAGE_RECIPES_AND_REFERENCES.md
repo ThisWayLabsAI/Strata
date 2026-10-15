@@ -2,6 +2,8 @@
 
 Updated 2026-10-15. This records implemented recipes, context-aware templates and reference editing, plus remaining chat integration.
 
+Images also offers optional camera, framing/zoom and lighting presets plus rectangular region guidance in Edit. The original source stays intact; a separately marked copy uses a reference slot. See [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md) for use, optional `editing`/`controlPrompt` recipe fields, tests and limits. This is annotation guidance rather than exact pixel masking. Templates preserve these selected controls; PNG recipe import restores presets but requires sources and region selection again.
+
 ## Implemented in Images
 
 New UI-generated previews and PNG downloads carry an uncompressed UTF-8 PNG `iTXt` chunk named `strata.image`. Its JSON schema is `strata.image.v1`. It stores the actual returned prompt and seed, output dimensions, generation date, returned image model ID, reported steps/backend/quantization and the starting template name. A differing original submitted prompt is retained separately. Unknown/private fields are excluded. No API keys or machine paths are added.

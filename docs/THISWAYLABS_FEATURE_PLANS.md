@@ -4,6 +4,8 @@ Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, P
 
 The user confirmed that enabled chat generation worked and accepted moving on while continuing testing. The text-to-image increment is accepted within its documented limits. [Implementation decisions](THISWAYLABS_DECISIONS.md) record the boundaries and release evidence. Existing acceptance lists below retain the original goals; actual coverage and outstanding device/backend checks are recorded in the handoff, not implied by acceptance of the increment.
 
+Intervening user-requested increment: optional region marking, camera/framing presets and lighting presets in Images. The first version and its verification are documented in [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md). It reuses the existing reference API and does not imply that chat reference editing is already implemented.
+
 ## Scope and order
 
 1. `fix/mobile-chat`: keep the composer usable with a phone keyboard and make streaming and image scrolling predictable. Moved first at the user's request.

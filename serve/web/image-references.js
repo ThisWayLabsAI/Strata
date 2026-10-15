@@ -35,6 +35,7 @@
     $("img-go").disabled = running || reading || (edit && (!ready || !refs.length));
     $("img-stop").hidden = !running;
     window.refreshImageTemplateContext?.();
+    window.StrataImageEditing?.sync({busy: running || reading, ready, refs, operation: $("img-operation").value});
   }
   async function add(file) {
     if (!ready) throw new Error("Reference editing is not configured on this server.");
@@ -109,6 +110,7 @@
   $("api-key").addEventListener("change", refresh);
   window.StrataReferences = {
     ready: () => ready,
+    refreshControls: render,
     request() { return refs.map(({data, name, role}) => ({data, name, role})); },
     begin() { running = true; controller = new AbortController(); render(); return controller.signal; },
     end() { running = false; controller = null; render(); },
