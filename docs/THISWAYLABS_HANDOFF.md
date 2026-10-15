@@ -31,7 +31,9 @@ Files: `serve/web/index.html`, `serve/web/app.css`, `serve/web/app.js`.
 
 ## Verification and remaining acceptance
 
-The user confirmed the mobile layout works, then reported that the Images keyboard covered Generate and part of Seed. The Images fix gives the form/results a scrolling viewport and Generate a separate footer. Visual-viewport resize also scrolls the focused image input into view. Size and Seed sit beside each other; Fixed reveals the integer seed field. Random omits the API seed field, preserving backend random generation. Seed zero is valid. The frontend bounds fixed seeds to safe JavaScript integers to prevent rounding.
+The user confirmed the mobile layout works, then reported that the Images keyboard covered Generate and part of Seed. The Images fix gives the form/results a scrolling viewport and Generate a separate footer. Visual-viewport resize also scrolls the focused image input into view. Size and Fixed seed sit beside each other with identical label styling and 44-pixel fields. Seed mode and New seed sit in a separate row above them. Random disables the fixed field without changing the layout and omits the API seed field. Seed zero is valid. The frontend accepts whole-number fixed seeds up to 9007199254740991 (the largest exactly representable JavaScript integer).
+
+The alignment/New seed adjustment is on `fix/seed-control-alignment`, based on `0fdf1c80`. New seed uses browser crypto to pick a seed from 0 through 2147483647, matching the backend random range, ensures it differs from the current value, switches to Fixed and saves the preference. It neither sends a generation request nor records an unused seed in history. The expanded image UI suite has 23 checks; all passed at 320x568, 390x844, 844x390, 1280x800 and 390x300, including identical field/label alignment, button behavior and keyboard/footer regression. The 390-pixel fixed-mode layout was also visually reviewed.
 
 `strata.imageSeed` stores the chosen mode and fixed input; `strata.imageSeeds` stores the newest 10 successful returned seeds with size and timestamp. Repeated seeds count as separate uses. Failed requests do not enter the log. Selecting a recent seed switches to Fixed and fills its value without generating or changing size/prompt. Storage is local to the browser; existing image result persistence is unchanged.
 
@@ -61,6 +63,8 @@ The user authorized deployment in this chat; the mobile frontend is deployed loc
 The pre-mobile source is `8e79877102340a8859190351d186c99fd9110273`. The deployment creates `rollback/pre-mobile-chat-20261015` in the live checkout. That commit includes the API Monitor link. The earlier `rollback/pre-api-monitor-link-20261015` points to `296b59d2`.
 
 The pre-Images-controls source is `1c77ddf9aed5740fd2849e68514124253be9667f`, preserved as `rollback/pre-image-controls-20261015` for the Images fix rollout. This keeps the previous mobile implementation and API Monitor link. No engine restart, model/config migration or new dependency is needed.
+
+The alignment/New seed rollout preserves `0fdf1c80808a5d6e188dcab32499dce7a81afde6` as `rollback/pre-seed-alignment-20261015`. This rollback retains the earlier keyboard fix, seed modes and history.
 
 Only source files, fixture/check tools, and docs are part of the mobile commit. The running server reads the HTML/JS/CSS from disk, so this source-only update needs a browser refresh and no engine restart. For rollback, verify tracked edits first, then switch the live source to the named rollback branch; refresh browser assets. Switching frontend source does not delete localStorage. Do not use reset --hard or clean -fdx. Later backend/dependency changes require their own stop/restart/build procedure.
 

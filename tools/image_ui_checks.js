@@ -20,6 +20,15 @@
     check($("img-recent-seeds").disabled, "Empty seed history disabled");
     $("img-seed-mode").value = "random";
     updateImageSeedMode();
+    const beforeNewSeed = requests.length;
+    const priorSeed = $("img-seed").value;
+    $("img-new-seed").click();
+    check($("img-seed-mode").value === "fixed" && Number($("img-seed").value) >= 0 && Number($("img-seed").value) <= 2147483647 &&
+      $("img-seed").value !== priorSeed, "New seed chooses a different random fixed seed in backend random range");
+    check(requests.length === beforeNewSeed && recentImageSeeds.length === 0, "New seed does not generate an image or record an unused seed");
+    check(store.get("imageSeed").mode === "fixed" && store.get("imageSeed").seed === $("img-seed").value, "New fixed seed preference is saved");
+    $("img-seed-mode").value = "random";
+    updateImageSeedMode();
     $("img-prompt").value = "fixture image";
     await submit();
     check(!Object.hasOwn(requests.at(-1), "seed"), "Random omits seed from request");
@@ -67,13 +76,16 @@
     const seedRect = $("img-seed").getBoundingClientRect();
     check(seedRect.top >= content.getBoundingClientRect().top - 1 && seedRect.bottom <= footer.top + 1, "Focused seed automatically scrolls above action footer");
     const sizeRect = $("img-size").getBoundingClientRect();
-    const modeRect = $("img-seed-mode").getBoundingClientRect();
-    check(modeRect.left > sizeRect.right && Math.abs(sizeRect.top - modeRect.top) < 5, "Seed is beside Size");
+    check(seedRect.left > sizeRect.right && Math.abs(sizeRect.top - seedRect.top) < 1 && Math.abs(sizeRect.height - seedRect.height) < 1,
+      "Fixed seed and Size fields share top alignment and height");
+    const sizeLabel = $("img-size").closest("label").querySelector(".st-label").getBoundingClientRect();
+    const seedLabel = $("img-fixed-seed").querySelector(".st-label").getBoundingClientRect();
+    check(Math.abs(sizeLabel.top - seedLabel.top) < 1 && Math.abs(sizeLabel.height - seedLabel.height) < 1, "Size and Fixed seed labels are aligned");
     delete viewport.height; delete viewport.offsetTop;
     fitChatViewport();
     $("img-seed-mode").value = "random";
     updateImageSeedMode();
-    check($("img-seed").disabled && $("img-fixed-seed").hidden, "Random disables and hides fixed seed field");
+    check($("img-seed").disabled && !$("img-fixed-seed").hidden, "Random disables fixed seed without shifting the layout");
     check($("img-results").querySelectorAll("figure").length >= 15, "Successful images remain inline in Images results");
     return {viewport: [innerWidth, innerHeight], checks: checks.length, passed: checks};
   } finally {

@@ -195,6 +195,10 @@ main { flex: 1; min-height: 0; display: flex; }
 .view--images > .about { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 .img-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .img-options .st-input, #img-recent-seeds { min-width: 0; width: 100%; }
+.img-options .st-input, .img-seed-toolbar .st-input, #img-new-seed { height: 44px; }
+.img-seed-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.img-seed-mode-field { flex: 1; min-width: 100px; }
+#img-new-seed { flex: none; }
 .img-actions { flex: none; width: 100%; max-width: 860px; margin: 0 auto; padding: 12px 24px; display: flex;
   align-items: center; gap: 12px; background: var(--st-surface); border-top: 1px solid var(--st-line); }
 .img-actions #img-hint { flex: 1; min-width: 0; overflow-wrap: anywhere; }

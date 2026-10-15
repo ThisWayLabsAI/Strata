@@ -82,18 +82,20 @@
       <form class="st-card img-form" id="img-form">
         <span class="card-title" id="img-title">Make an image</span>
         <textarea class="st-input img-prompt" id="img-prompt" rows="3" placeholder="Describe the image&hellip;" aria-label="Prompt"></textarea>
+        <div class="img-seed-toolbar">
+          <label class="st-field img-seed-mode-field"><span class="st-label">Seed mode</span>
+            <select class="st-input" id="img-seed-mode"><option value="random">Random</option><option value="fixed">Fixed</option></select></label>
+          <button type="button" class="st-btn st-btn--secondary" id="img-new-seed" title="Pick a new random fixed seed">New seed</button>
+        </div>
         <div class="img-options">
-          <label class="st-field">Size
+          <label class="st-field"><span class="st-label">Size</span>
             <select class="st-input" id="img-size">
               <option>1024x1024</option><option>1536x1024</option><option>1024x1536</option>
               <option>768x768</option><option>512x512</option></select></label>
-          <div class="st-field">
-            <label class="st-label" for="img-seed-mode">Seed</label>
-            <select class="st-input" id="img-seed-mode"><option value="random">Random</option><option value="fixed">Fixed</option></select>
-            <label class="st-field" id="img-fixed-seed" hidden>Fixed seed
-              <input class="st-input" id="img-seed" type="number" min="0" max="9007199254740991" step="1" value="0" disabled></label>
-          </div>
+          <label class="st-field" id="img-fixed-seed"><span class="st-label">Fixed seed</span>
+            <input class="st-input" id="img-seed" type="number" min="0" max="9007199254740991" step="1" value="0" aria-describedby="img-seed-help" disabled></label>
         </div>
+        <p class="muted small" id="img-seed-help">Fixed seed range: 0&ndash;9007199254740991. New seed picks a random value and switches to Fixed.</p>
         <label class="st-field">Recent seeds (last 10)
           <select class="st-input" id="img-recent-seeds" disabled><option value="">No seeds used yet</option></select></label>
         <p class="muted small">Successful image seeds are saved in this browser. Choose one to reuse it with Fixed.</p>

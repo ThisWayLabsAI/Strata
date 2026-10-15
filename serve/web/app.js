@@ -1187,7 +1187,6 @@ let recentImageSeeds = Array.isArray(savedImageSeeds) ? savedImageSeeds.filter((
   item && validImageSeed(item.seed) && typeof item.size === "string" && Number.isFinite(item.time)).slice(0, 10) : [];
 function updateImageSeedMode() {
   const fixed = $("img-seed-mode").value === "fixed";
-  $("img-fixed-seed").hidden = !fixed;
   $("img-seed").disabled = !fixed;
   $("img-seed").required = fixed;
   store.set("imageSeed", {mode: fixed ? "fixed" : "random", seed: $("img-seed").value});
@@ -1199,6 +1198,15 @@ function renderRecentImageSeeds() {
   select.disabled = !recentImageSeeds.length;
 }
 $("img-seed-mode").onchange = updateImageSeedMode;
+$("img-new-seed").onclick = () => {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  let seed = values[0] & 0x7fffffff;  // same range as the image backend's random seeds
+  if (seed === Number($("img-seed").value)) seed = (seed + 1) % 2147483648;
+  $("img-seed-mode").value = "fixed";
+  $("img-seed").value = String(seed);
+  updateImageSeedMode();
+};
 $("img-seed").oninput = updateImageSeedMode;
 $("img-recent-seeds").onchange = () => {
   const value = $("img-recent-seeds").value;
