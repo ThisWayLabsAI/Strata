@@ -78,7 +78,7 @@ function showTab(name) {
   for (const v of ["chat", "images", "monitor", "about"]) $(`view-${v}`).hidden = v !== tab;
   if (tab === "images") $("img-prompt").focus();
   if (location.hash.slice(1) !== tab) history.replaceState(null, "", tab === "chat" ? location.pathname : `#${tab}`);
-  if (tab === "chat") $("input").focus();
+  if (tab === "chat" && !(mobileChat && matchMedia("(pointer: coarse)").matches)) $("input").focus();
   if (tab === "monitor") loadMcp();
   if (tab === "about") loadConfig();
   if (lastMetrics) render(lastMetrics);
@@ -565,6 +565,13 @@ let settings = {...DEFAULTS, ...store.get("sampling", {})};
 let messages = store.get("chat", []);
 let attachments = [];                 // {name, url}
 let busy = null;                      // {controller, msg}
+let chatLayout = store.get("chatLayout", "auto");
+if (!["auto", "mobile", "desktop"].includes(chatLayout)) chatLayout = "auto";
+let mobileChat = false;
+let followLatest = true;
+let chatScrollFrame = 0;
+let readingAnchor = null;
+const mobileViewport = matchMedia("(max-width: 900px), (pointer: coarse)");
 
 function saveChat() {
   store.set("chat", messages.map((m) => ({...m, images: (m.images || []).map((i) => ({name: i.name})),
@@ -698,7 +705,75 @@ function renderChat() {
   scrollDown(true);
 }
 function nearBottom() { const s = $("chat-scroll"); return s.scrollHeight - s.scrollTop - s.clientHeight < 120; }
-function scrollDown(force) { const s = $("chat-scroll"); if (force || nearBottom()) s.scrollTop = s.scrollHeight; }
+function rememberReadingPosition() {
+  readingAnchor = null;
+  if (followLatest) return;
+  const top = $("chat-scroll").getBoundingClientRect().top;
+  const element = [...$("chat").querySelectorAll(".st-msg")].find((el) => el.getBoundingClientRect().bottom > top);
+  if (element) readingAnchor = {element, offset: element.getBoundingClientRect().top - top};
+}
+function scrollDown(force) {
+  const s = $("chat-scroll");
+  if (mobileChat) {
+    if (force) { followLatest = true; readingAnchor = null; }
+    if (followLatest) s.scrollTop = s.scrollHeight;
+    else if (readingAnchor?.element.isConnected) {
+      // Also preserve the reading position in browsers without native scroll anchoring.
+      s.scrollTop += readingAnchor.element.getBoundingClientRect().top - s.getBoundingClientRect().top - readingAnchor.offset;
+    }
+    $("chat-jump").hidden = followLatest || s.scrollHeight <= s.clientHeight;
+  } else if (force || nearBottom()) s.scrollTop = s.scrollHeight;
+}
+function scheduleChatScroll() {
+  if (chatScrollFrame) return;
+  chatScrollFrame = requestAnimationFrame(() => { chatScrollFrame = 0; scrollDown(); });
+}
+$("chat-scroll").addEventListener("scroll", () => {
+  if (!mobileChat) return;
+  followLatest = nearBottom();
+  rememberReadingPosition();
+  $("chat-jump").hidden = followLatest;
+}, {passive: true});
+$("jump-latest").onclick = () => { scrollDown(true); };
+// ResizeObserver catches delayed image loads, tool panels and composer growth as well as tokens.
+if (typeof ResizeObserver !== "undefined") {
+  const chatResize = new ResizeObserver(() => { if (mobileChat && tab === "chat") scheduleChatScroll(); });
+  chatResize.observe($("chat"));
+  chatResize.observe($("chat-scroll"));
+}
+function fitChatViewport() {
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  if (mobileChat) {
+    // Let the browser handle pinch zoom. Do not resize the app to a magnified viewport.
+    if (vv && Math.abs(vv.scale - 1) > 0.01) return;
+    root.style.setProperty("--chat-viewport-height", `${vv ? vv.height : innerHeight}px`);
+    root.style.setProperty("--chat-viewport-top", `${vv ? vv.offsetTop : 0}px`);
+  } else {
+    root.style.removeProperty("--chat-viewport-height");
+    root.style.removeProperty("--chat-viewport-top");
+  }
+  if (mobileChat) { autosize(); scrollDown(); }
+}
+function applyChatLayout() {
+  const viewport = document.querySelector('meta[name="viewport"]');
+  const viewportContent = chatLayout === "desktop" ? "width=1100, viewport-fit=cover" : "width=device-width, initial-scale=1, viewport-fit=cover";
+  if (viewport.content !== viewportContent) viewport.content = viewportContent;
+  mobileChat = chatLayout === "mobile" || (chatLayout === "auto" && mobileViewport.matches);
+  document.documentElement.dataset.mobileChat = String(mobileChat);
+  $("chat-layout").value = chatLayout;
+  $("chat-jump").hidden = true;
+  followLatest = nearBottom();
+  fitChatViewport();
+  autosize();
+}
+$("chat-layout").onchange = () => { chatLayout = $("chat-layout").value; store.set("chatLayout", chatLayout); applyChatLayout(); };
+window.addEventListener("resize", fitChatViewport);
+mobileViewport.addEventListener("change", applyChatLayout);
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", fitChatViewport);
+  visualViewport.addEventListener("scroll", fitChatViewport);
+}
 
 $("chat").addEventListener("click", (e) => {
   const cc = e.target.closest("[data-code-copy]");
@@ -874,9 +949,15 @@ async function send() {
 $("composer").onsubmit = (e) => { e.preventDefault(); send(); };
 $("stop-btn").onclick = () => { if (busy) busy.controller.abort(); };
 $("input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing &&
+      !(mobileChat && matchMedia("(pointer: coarse)").matches)) { e.preventDefault(); send(); }
 });
-function autosize() { const t = $("input"); t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, innerHeight * 0.4)}px`; }
+function autosize() {
+  const t = $("input");
+  const height = mobileChat ? (window.visualViewport?.height || innerHeight) : innerHeight;
+  t.style.height = "auto";
+  t.style.height = `${Math.min(t.scrollHeight, Math.max(48, height * (mobileChat ? 0.25 : 0.4)))}px`;
+}
 $("input").addEventListener("input", autosize);
 
 $("new-btn").onclick = () => {
@@ -1077,6 +1158,7 @@ $("scrim").onclick = () => openDrawer(false);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("drawer").dataset.open === "true") openDrawer(false); });
 
 // ------------------------------------------------------------------ start
+applyChatLayout();
 setBusy(false);
 renderChat();
 const startQuestion = new URLSearchParams(location.search).get("q");   // /?q=... starts a chat (a shortcut)

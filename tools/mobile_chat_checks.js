@@ -1,0 +1,152 @@
+// Run against tools/mobile_chat_fixture.py in an isolated browser, never a real chat.
+// Get-Content -Raw tools/mobile_chat_checks.js | agent-browser --session <name> eval --stdin
+// Set the browser viewport first. Throws on a failure; returns the checked viewport.
+(async () => {
+  const checked = [];
+  const check = (condition, name) => { if (!condition) throw new Error(name); checked.push(name); };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+  const waitFor = async (predicate) => {
+    for (let i = 0; i < 100; i++) { if (predicate()) return; await settle(); }
+    throw new Error("Timed out waiting for fixture reply");
+  };
+  await waitFor(() => health.model === "mobile-fixture-no-gpu");
+  const choose = (value) => { $("chat-layout").value = value; $("chat-layout").dispatchEvent(new Event("change")); };
+  choose("auto");
+  showTab("chat");
+  await settle();
+  check(mobileChat === mobileViewport.matches, "Automatic follows viewport/touch capability");
+  choose("desktop");
+  check(!mobileChat && document.body.style.height === "", "Desktop override disables mobile sizing");
+  check(!document.documentElement.style.getPropertyValue("--chat-viewport-height"), "Desktop clears viewport override");
+  check(document.querySelector('meta[name="viewport"]').content.includes("width=1100"), "Desktop requests a desktop-sized phone viewport");
+  choose("mobile");
+  check(mobileChat && store.get("chatLayout") === "mobile", "Mobile override is saved");
+  const nativeMatchMedia = window.matchMedia;
+  try {
+    window.matchMedia = (query) => query === "(pointer: coarse)" ? {matches: true} : nativeMatchMedia(query);
+    $("input").value = "A draft to keep";
+    const enter = new KeyboardEvent("keydown", {key: "Enter", bubbles: true, cancelable: true});
+    $("input").dispatchEvent(enter);
+    check(!enter.defaultPrevented && !busy, "Touch Enter permits a newline instead of sending");
+    window.matchMedia = nativeMatchMedia;
+    const composing = new KeyboardEvent("keydown", {key: "Enter", isComposing: true, bubbles: true, cancelable: true});
+    $("input").dispatchEvent(composing);
+    check(!composing.defaultPrevented && !busy, "IME composition Enter does not send");
+  } finally { window.matchMedia = nativeMatchMedia; $("input").value = ""; }
+  messages = Array.from({length: 24}, (_, i) => ({role: i % 2 ? "assistant" : "user", text:
+    `Message ${i}: ` + "Readable fixture text. ".repeat(30), time: Date.now()}));
+  messages.push({role: "assistant", text: "```text\n" + "long-code-".repeat(90) + "\n```\n\n" +
+    "| Long column | Second column |\n| --- | --- |\n| " + "table-cell-".repeat(70) + " | value |", time: Date.now()});
+  renderChat();
+  await settle();
+  const scroll = $("chat-scroll");
+  const rect = (id) => $(id).getBoundingClientRect();
+  check(document.documentElement.scrollWidth <= innerWidth + 1, "No page-wide horizontal overflow");
+  check(scroll.scrollWidth <= scroll.clientWidth + 1, "Long code/table contained within transcript");
+  check(rect("send-btn").height >= 44 && rect("send-btn").width >= 44, "Send touch target at least 44px");
+  check(rect("attach-btn").height >= 44 && rect("attach-btn").width >= 44, "Attachment touch target at least 44px");
+  check(rect("send-btn").bottom <= visualViewport.height + 1, "Send fits visible viewport");
+  const last = messages.at(-1), lastEl = $("chat").lastElementChild;
+  last.reasoning = "";
+  last.text += "\n\n" + "A large streamed paragraph. ".repeat(100);
+  updateAssistant(lastEl, last, true);
+  scrollDown();
+  await settle();
+  check(nearBottom() && followLatest, "Follow remains active after growth larger than viewport");
+  onTool(last, {event: "call", id: "fixture-tool", name: "long_tool_name_".repeat(20), arguments: {text: "argument ".repeat(200)}});
+  onTool(last, {event: "result", id: "fixture-tool", text: "A tool result ".repeat(100), ok: true});
+  last.tools[0].open = true;
+  updateAssistant(lastEl, last, true);
+  await settle();
+  check(scroll.scrollWidth <= scroll.clientWidth + 1 && nearBottom(), "Expanded tool results fit and follow");
+  scroll.scrollTop = 250;
+  await settle();
+  const readingAt = scroll.scrollTop;
+  check(!$("chat-jump").hidden && !followLatest, "Reading older messages exposes Jump to latest");
+  last.text += "\n\n" + "More streamed output. ".repeat(100);
+  updateAssistant(lastEl, last, true);
+  scrollDown();
+  await settle();
+  check(Math.abs(scroll.scrollTop - readingAt) <= 2, "Streaming preserves older reading position");
+  const anchor = $("chat").children[8];
+  scroll.scrollTop += anchor.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 10;
+  await settle();
+  const anchorTop = anchor.getBoundingClientRect().top;
+  scroll.style.overflowAnchor = "none";  // also exercise browsers without native anchoring
+  const image = document.createElement("img");
+  image.alt = "Delayed image fixture";
+  image.style.cssText = "display:block;width:100%;height:240px";
+  $("chat").children[1].querySelector(".st-bubble").append(image);
+  await settle();
+  check(Math.abs(anchor.getBoundingClientRect().top - anchorTop) <= 2, "Delayed image above reading position preserves anchor");
+  scroll.style.removeProperty("overflow-anchor");
+  const readingViewport = window.visualViewport;
+  const anchorOffset = anchor.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
+  Object.defineProperty(readingViewport, "height", {configurable: true, value: Math.max(220, readingViewport.height - 100)});
+  readingViewport.dispatchEvent(new Event("resize"));
+  await settle();
+  check(Math.abs(anchor.getBoundingClientRect().top - scroll.getBoundingClientRect().top - anchorOffset) <= 2,
+    "Keyboard resize preserves older reading position");
+  delete readingViewport.height;
+  fitChatViewport();
+  await settle();
+  $("jump-latest").click();
+  await settle();
+  check(nearBottom() && $("chat-jump").hidden, "Jump resumes following");
+  $("input").value = "Draft line\n".repeat(50);
+  autosize();
+  await settle();
+  check(rect("send-btn").bottom <= visualViewport.height + 1 && rect("input").top >= 0, "Multiline draft leaves composer visible");
+  const vv = window.visualViewport;
+  Object.defineProperty(vv, "height", {configurable: true, value: 330});
+  Object.defineProperty(vv, "offsetTop", {configurable: true, value: 12});
+  vv.dispatchEvent(new Event("resize"));
+  await settle();
+  check(rect("send-btn").bottom <= 343, "Simulated keyboard resize/offset keeps Send visible");
+  const keyboardHeight = document.body.getBoundingClientRect().height;
+  Object.defineProperty(vv, "scale", {configurable: true, value: 2});
+  Object.defineProperty(vv, "height", {configurable: true, value: 180});
+  vv.dispatchEvent(new Event("resize"));
+  check(document.body.getBoundingClientRect().height === keyboardHeight, "Pinch zoom does not refit application");
+  delete vv.height; delete vv.offsetTop; delete vv.scale;
+  fitChatViewport();
+  await settle();
+  $("input").value = "stream";
+  const sending = send();
+  await waitFor(() => busy && messages.at(-1).text.length > 200);
+  check(!$("stop-btn").hidden && rect("stop-btn").bottom <= visualViewport.height + 1, "Stop is reachable during streaming");
+  scroll.scrollTop = 100;
+  await settle();
+  const duringStream = scroll.scrollTop;
+  await settle();
+  check(Math.abs(scroll.scrollTop - duringStream) <= 2, "Actual SSE streaming leaves reader in place");
+  $("stop-btn").click();
+  await sending;
+  check(!busy && messages.at(-1).stopped && $("stop-btn").hidden, "Stop cancels and clears busy state");
+  $("input").value = "error";
+  await send();
+  check(!busy && messages.at(-1).error.includes("Fixture error"), "HTTP error renders and permits next request");
+  const sendRect = rect("send-btn");
+  check(document.elementFromPoint(sendRect.left + sendRect.width / 2, sendRect.top + sendRect.height / 2)?.closest("#send-btn"),
+    "Error notification does not cover Send");
+  check(nearBottom(), "Sending a new message resumes following");
+  $("input").value = "complete";
+  const completing = send();
+  await waitFor(() => busy && messages.at(-1).text.length > 200);
+  scroll.scrollTop = 100;
+  await settle();
+  const beforeComplete = scroll.scrollTop;
+  await completing;
+  check(!busy && !messages.at(-1).stopped && !messages.at(-1).error, "Normal streamed reply completes");
+  check(Math.abs(scroll.scrollTop - beforeComplete) <= 2 && !$("chat-jump").hidden, "Completion preserves reading position");
+  const beforeTabs = scroll.scrollTop;
+  showTab("monitor"); await settle();
+  check(!$("view-monitor").hidden && !!document.querySelector('a[href="/api-monitor"]'), "Monitor and API Monitor link retained");
+  showTab("images"); await settle();
+  check(!$("view-images").hidden && !$("img-form").hidden, "Images tab retained");
+  showTab("chat");
+  await settle();
+  check(Math.abs(scroll.scrollTop - beforeTabs) <= 2, "Returning from other tabs preserves reading position");
+  choose("auto");
+  return {viewport: [innerWidth, innerHeight], checks: checked.length, passed: checked};
+})()

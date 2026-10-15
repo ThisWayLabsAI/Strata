@@ -1,11 +1,11 @@
 # Thiswaylabs feature plans
 
-Status: proposed implementation and acceptance criteria, 2026-10-15. The three features are not implemented by this document.
+Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat is implemented for local phone verification; see [the current handoff](THISWAYLABS_HANDOFF.md). Chat images and model switching remain planned.
 
 ## Scope and order
 
-1. `feature/chat-images`: generate images directly from chat, show persistent inline results, and hand the GPU back safely. This is the first implementation priority.
-2. `fix/mobile-chat`: keep the composer usable with a phone keyboard and make streaming and image scrolling predictable.
+1. `fix/mobile-chat`: keep the composer usable with a phone keyboard and make streaming and image scrolling predictable. Moved first at the user's request.
+2. `feature/chat-images`: generate images directly from chat, show persistent inline results, and hand the GPU back safely. This remains the next major feature after mobile verification.
 3. `feature/model-switcher`: choose an installed chat model per conversation, with matching API behavior and serialized GPU transitions.
 
 Reference-photo editing is a follow-up to chat image generation. Attaching a photo for vision remains a separate existing capability; the first release must not imply it can edit that photo.
@@ -16,7 +16,7 @@ The small API Monitor navigation change accompanies these plans on `chore/featur
 
 Work in `C:\AI\Strata-dev`. Keep `main` as the upstream mirror and target feature PRs at `thiswaylabs`. Keep each feature independently reviewable. This planning branch starts from `thiswaylabs`; integrate its documentation before updating the existing feature branches.
 
-Do not modify the live checkout, scheduled task, controls, API keys, machine configs, installed models, packs, or shared Python environment. Never commit runtime data or credentials. New features are opt-in; with each feature disabled, preserve existing request behavior and defaults. The navigation link is an explicitly requested UI addition, not a change to monitoring defaults.
+Do not modify the scheduled task, controls, API keys, machine configs, installed models, packs, or shared Python environment. Live source deployment requires user authorization, which was given for the local frontend rollout in this chat. Never commit runtime data or credentials. New features are opt-in except for mobile layout, which the user explicitly requested should be automatic with a saved desktop/mobile override. Preserve existing request behavior and defaults. The navigation link is an explicitly requested UI addition, not a change to monitoring defaults.
 
 Use mock engines and browser fixtures first. Actual GPU tests are a separate coordinated session: finish active work, stop live Strata with the existing controls, then start development on port 8081. Never run two GPU engines concurrently. Development output stays in the configured development output directories. If dependencies change, use a separate development environment. Restore the live service after testing through its existing controls.
 

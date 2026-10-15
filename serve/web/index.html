@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Strata</title>
 <link rel="icon" href="web/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="web/tokens.css">
@@ -49,6 +49,9 @@
       </div>
     </div>
     <div class="composer-wrap">
+      <div class="chat-jump" id="chat-jump" hidden>
+        <button type="button" class="st-btn st-btn--secondary" id="jump-latest">Jump to latest</button>
+      </div>
       <form class="st-composer" id="composer">
         <div class="attachments" id="attachments" hidden></div>
         <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message"></textarea>
@@ -198,6 +201,15 @@
         </div>
         <div class="toggle-row"><span>Dark theme</span>
           <button class="st-toggle" id="dark-toggle" role="switch" aria-checked="false" aria-label="Dark theme"></button></div>
+        <div class="st-field">
+          <label class="st-label" for="chat-layout">Chat layout</label>
+          <select class="st-input" id="chat-layout">
+            <option value="auto">Automatic</option>
+            <option value="mobile">Mobile</option>
+            <option value="desktop">Desktop</option>
+          </select>
+          <span class="muted small">Automatic adapts to screen size and touch controls. Choose a layout to override it in this browser.</span>
+        </div>
         <p class="muted small">Chats, settings and the key are kept in this browser only.
           <a href="https://github.com/Niko1221/Strata" target="_blank" rel="noopener noreferrer">Strata on GitHub</a></p>
       </div>
