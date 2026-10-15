@@ -6,6 +6,10 @@ The local-fidelity follow-up adds protected compositing, focused crops for small
 
 ## Use it
 
+Submission feedback (2026-10-15): both operations need a written prompt; camera and lighting choices supplement it. Edit also needs source image 1. If Edit is disabled, the footer beside the button explains whether to upload a source, wait for file reading, or check reference support/API authorization. Invalid steps (whole number 1–100) or fixed seeds (whole number 0–9007199254740991) show persistent footer guidance and focus the field, opening its collapsed panel. New seed or Random can resolve a missing fixed seed. An unfinished Image URL only matters when importing it; it must not block an otherwise valid request. A reference URL must be imported before it becomes a reference.
+
+Failures remain in the footer after transient notifications disappear, including authorization, network, unreadable responses and empty results. Prompt and references remain available for retry; requests are never automatically replayed. The progress bar and Cancel appear only during a pending request. No new image model quality claims follow from these UI checks.
+
 Write the scene or requested changes in Prompt. Choose any camera, framing or lighting presets, then review **Prompt that will be sent**. The draft is kept intact; the selected instructions are added only to the request. The defaults are **Unchanged / prompt decides**, preserving the previous request prompt. Reset presets clears these choices. Selecting a preset never starts generation or changes the operation, source references, size or seed.
 
 View direction: front, three-quarter, side profile or rear. Camera elevation: eye level, high angle, low angle or overhead. These are independent: choose low/front or low/rear, for example. Framing: close-up/tighter, medium shot, wide/farther back and full subject. These describe a generated view, not a calibrated camera or numerical optical zoom. The installed model failed to establish several requested views on the user's cat/mouse scene; both camera fields are marked experimental. New views and wider framing may invent hidden details.

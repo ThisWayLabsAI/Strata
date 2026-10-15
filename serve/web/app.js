@@ -1425,12 +1425,23 @@ $("img-recipe-file").onchange = async () => {
   finally { $("img-recipe-file").value = ""; }
 };
 renderImageTemplates();
+function imageSubmissionError(message, field) {
+  $("img-hint").textContent = message;
+  if (field) {
+    const input = $(field);
+    for (let parent = input.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === "DETAILS") parent.open = true;
+    }
+    input.focus();
+  }
+  toast("warn", "Check image request", message, 8000);
+}
 $("img-form").onsubmit = async (ev) => {
   ev.preventDefault();
   if ($("img-go").disabled) return;
   let prompt = $("img-prompt").value.trim();
-  if (!prompt) return;
-  if (prompt.length > 16384) { toast("warn", "Prompt too long", "Use at most 16,384 characters for a reusable image recipe."); return; }
+  if (!prompt) { imageSubmissionError("Enter a prompt describing what to generate or change. Camera and lighting presets are added to that prompt.", "img-prompt"); return; }
+  if (prompt.length > 16384) { imageSubmissionError("Use at most 16,384 characters for the image prompt.", "img-prompt"); return; }
   const operation = $("img-operation").value;
   let references = window.StrataReferences?.request() || [];
   const controlPrompt = prompt;
@@ -1439,29 +1450,33 @@ $("img-form").onsubmit = async (ev) => {
   try {
     const prepared = window.StrataImageEditing?.prepare(prompt, references, operation);
     if (prepared) { prompt = prepared.prompt; references = prepared.references; editing = prepared.editing; finalizeImage = prepared.finalize; requestSize = prepared.requestSize; }
-  } catch (error) { toast("warn", "Check image controls", error.message, 8000); return; }
+  } catch (error) { imageSubmissionError(error.message); return; }
   const body = {prompt, size: requestSize || $("img-size").value, response_format: "b64_json"};
   if (references.length) body.references = references;
-  if (operation === "edit" && !references.length) return;
+  if (operation === "edit" && !references.length) { imageSubmissionError("Add a source image under Reference images before editing.", "img-reference-upload"); return; }
+  if ($("img-steps").validity.badInput) { imageSubmissionError("Steps must be a whole number from 1 to 100, or leave it empty for the server default.", "img-steps"); return; }
   if ($("img-steps").value !== "") {
     const steps = Number($("img-steps").value);
-    if (!Number.isInteger(steps) || steps < 1 || steps > 100) { $("img-steps").reportValidity(); return; }
+    if (!Number.isInteger(steps) || steps < 1 || steps > 100) { imageSubmissionError("Steps must be a whole number from 1 to 100, or leave it empty for the server default.", "img-steps"); return; }
     body.steps = steps;
   }
   const templateName = activeImageTemplate;
   if ($("img-seed-mode").value === "fixed") {
-    if (!validImageSeed($("img-seed").value)) { $("img-seed").reportValidity(); return; }
+    if (!validImageSeed($("img-seed").value)) { imageSubmissionError("Enter a whole fixed seed from 0 to 9007199254740991, press New seed, or choose Random.", "img-seed"); return; }
     body.seed = Number($("img-seed").value);
   }
-  const signal = window.StrataReferences?.begin();
-  $("img-go").disabled = true;
-  $("img-hint").textContent = "Generating\u2026 (a minute or more on a small GPU)";
-  $("img-progress").hidden = false;
-  $("img-progress").setAttribute("aria-busy", "true");
   try {
+    const signal = window.StrataReferences?.begin();
+    $("img-go").disabled = true;
+    $("img-hint").textContent = "Generating\u2026 (a minute or more on a small GPU)";
+    $("img-progress").hidden = false;
+    $("img-progress").setAttribute("aria-busy", "true");
     const r = await fetch(operation === "edit" ? "v1/images/edits" : "v1/images/generations", {method: "POST", headers: headers(true), body: JSON.stringify(body), signal});
-    const j = await r.json();
+    if (r.status === 401 || r.status === 403) throw new Error("Image request was not authorized. Enter the server API key in About > Settings, then try again.");
+    let j;
+    try { j = await r.json(); } catch (_) { throw new Error(`The server returned an unreadable image response (HTTP ${r.status}). Check the connection and try again.`); }
     if (!r.ok) throw new Error((j.error && j.error.message) || r.statusText);
+    if (!Array.isArray(j.data) || !j.data.length || j.data.some(d => !d.b64_json)) throw new Error("The server returned no image. Your prompt and references are still available; try again or check the API Monitor.");
     for (const d of j.data) {
       let imageData=d.b64_json,outputSize=j.size || body.size;
       if(finalizeImage) {
@@ -1485,7 +1500,8 @@ $("img-form").onsubmit = async (ev) => {
     renderRecentImageSeeds();
     $("img-hint").textContent = "Done. Download PNG + recipe to keep the prompt and seed with the image.";
   } catch (e) {
-    $("img-hint").textContent = "";
+    if (e instanceof TypeError && /fetch|network/i.test(e.message)) e = new Error("Could not reach the image service (" + e.message + "). Check that Strata is running and your connection is available, then try again.");
+    $("img-hint").textContent = e.name === "AbortError" ? "Image request cancelled. You can adjust the prompt and try again." : String(e.message || e);
     toast(e.name === "AbortError" ? "info" : "error", e.name === "AbortError" ? "Image request cancelled" : "No image", e.name === "AbortError" ? "The server will stop the job and release its GPU turn." : String(e.message || e), 8000);
   } finally {
     $("img-progress").hidden = true;

@@ -41,6 +41,12 @@
     $("img-operation").disabled = reading || running;
     $("img-go").textContent = edit ? "Edit image" : "Generate";
     $("img-go").disabled = running || reading || (edit && (!ready || !refs.length));
+    if (reading) $("img-hint").textContent = "Reading reference images… Please wait before submitting.";
+    else if (!running && edit && (!ready || !refs.length)) $("img-hint").textContent = !ready
+      ? $("img-reference-status").textContent
+      : "Add a source image under Reference images before editing. Image 1 is the image to change.";
+    else if (!running && /^(Reading reference images|Add a source image)/.test($("img-hint").textContent))
+      $("img-hint").textContent = "One image at a time; chat waits while it generates.";
     $("img-stop").hidden = !running;
     window.refreshImageTemplateContext?.();
     window.StrataImageEditing?.sync({busy: running || reading, ready, refs, operation: $("img-operation").value});

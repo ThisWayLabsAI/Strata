@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Image submission feedback
+
+Images validates only the request's prompt, sampling fields and edit prerequisites. Unused URL/import/template fields must not prevent native button submission. Keep the written prompt required, including when presets are selected, and explain this requirement. Missing edit sources/support and file-reading busy states explain disabled buttons in the footer. Retain errors beside the actions, reveal/focus invalid sampling fields, preserve draft/references, and never replay a failed request automatically. Browser regressions must exercise button clicks, since calling `onsubmit` directly bypasses native constraint validation. See the handoff for measured checks and deployment baseline.
+
 ## Accepted: text-to-image chat increment
 
 Application commit `996c3cbf503817d9943614555cff61e1def7fb79` is deployed locally. After enabling **Create images in chat**, the user reported successful generation and agreed to move on while continuing exploratory testing. This accepts the first text-to-image increment; it does not close outstanding actual-phone checks or establish broad model quality.
