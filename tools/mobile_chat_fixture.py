@@ -61,9 +61,10 @@ class Fixture(SimpleHTTPRequestHandler):
                 self.json_reply({"error": {"message": "Fixture image failure"}}, 500)
                 return
             time.sleep(0.02)
-            self.json_reply({"size": request.get("size", "1024x1024"), "data": [{
+            self.json_reply({"size": request.get("size", "1024x1024"), "model": "fixture-image-model", "created": int(time.time()),
+                             "strata": {"steps": request.get("steps", 8), "backend": "fixture", "quant": "fixture"}, "data": [{
                 "seed": request["seed"] if "seed" in request else next(IMAGE_SEEDS),
-                "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="}]})
+                "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="}]})
             return
         if urlsplit(self.path).path != "/v1/chat/completions":
             self.send_error(404)

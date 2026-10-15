@@ -4,6 +4,10 @@ Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state f
 
 ## User intent and implementation order
 
+Latest increment: `feature/image-metadata-templates`, based on `9172b71f`, implements PNG generation recipes, import/reuse, Discuss in chat and 24 starter templates plus a browser-local saved library. See [IMAGE_RECIPES_AND_REFERENCES.md](IMAGE_RECIPES_AND_REFERENCES.md) for the schema, implemented behavior, verification and reference-editing plan. The user explicitly invited useful additional starters beyond the originally listed genres. Built-ins now also include anime/manga, watercolor, architectural interiors, food/product photography, textures, storyboards, icons, costume/material exploration and vehicle views.
+
+Reference editing in Images as well as chat is recommended, using one shared backend. It remains unimplemented: the installed runner documents reference editing, but the local image model directory has no required vision projector and Strata has no edit/reference endpoint. No weights, machine configs or API keys were changed in this increment.
+
 Mobile support is first. Automatically choose the layout using viewport size and primary touch capability, with Automatic / Mobile / Desktop under About > Settings. Save the preference per browser. The user explicitly requested this automatic default, overriding the general opt-in rule for this layout feature.
 
 Next: chat image generation with persistent inline results and safe GPU handoff. Reference-photo editing follows separately. Then implement validated per-conversation model switching. Detailed acceptance criteria remain in [THISWAYLABS_FEATURE_PLANS.md](THISWAYLABS_FEATURE_PLANS.md).
@@ -65,6 +69,8 @@ The pre-mobile source is `8e79877102340a8859190351d186c99fd9110273`. The deploym
 The pre-Images-controls source is `1c77ddf9aed5740fd2849e68514124253be9667f`, preserved as `rollback/pre-image-controls-20261015` for the Images fix rollout. This keeps the previous mobile implementation and API Monitor link. No engine restart, model/config migration or new dependency is needed.
 
 The alignment/New seed rollout preserves `0fdf1c80808a5d6e188dcab32499dce7a81afde6` as `rollback/pre-seed-alignment-20261015`. This rollback retains the earlier keyboard fix, seed modes and history.
+
+The recipe/template rollout preserves `9172b71ff07084dfcbdc1d87f3c882cda1cddab6` as `rollback/pre-image-recipes-20261015`. It is a frontend-only rollout, including the new `web/image-tools.js` asset; refresh browser assets together after deployment or rollback. PNG recipes are embedded in UI download/preview copies, while raw API/server-file behavior stays unchanged. Saved-template data uses `strata.imageTemplates`; rolling source back does not delete that browser data.
 
 Only source files, fixture/check tools, and docs are part of the mobile commit. The running server reads the HTML/JS/CSS from disk, so this source-only update needs a browser refresh and no engine restart. For rollback, verify tracked edits first, then switch the live source to the named rollback branch; refresh browser assets. Switching frontend source does not delete localStorage. Do not use reset --hard or clean -fdx. Later backend/dependency changes require their own stop/restart/build procedure.
 
