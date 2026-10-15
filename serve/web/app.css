@@ -276,6 +276,18 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
 
 #img-reference-inputs { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 12px; }
 #img-reference-list { display: grid; gap: 12px; }
+.img-upload { width: 100%; min-height: 156px; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 2px dashed var(--st-line); border-radius: var(--st-r-md); background: var(--st-surface-2); color: var(--st-ink); font: inherit; text-align: center; cursor: pointer; }
+.img-upload > .st-icon { width: 28px; height: 28px; color: var(--st-accent-text); margin-bottom: 2px; }
+.img-upload-desktop, .img-upload-mobile { color: var(--st-ink-muted); font-size: var(--st-fs-sm); }
+.img-upload-mobile { display: none; }
+.img-upload:focus-visible { outline: 2px solid var(--st-focus); outline-offset: 3px; }
+.img-upload:not(:disabled):hover, .img-upload.dragging { border-color: var(--st-accent-text); background: var(--st-accent-tint); }
+.img-upload:disabled { opacity: .55; cursor: not-allowed; }
+@media (pointer: coarse), (max-width: 640px) {
+  .img-upload { min-height: 112px; padding: 16px 12px; border-style: solid; }
+  .img-upload-desktop { display: none; }
+  .img-upload-mobile { display: inline; }
+}
 .img-reference-card { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--st-line); border-radius: 8px; overflow-wrap: anywhere; }
 .img-reference-card img { width: 100%; max-height: 180px; object-fit: contain; }
 .img-reference-card .img-template-actions { flex-wrap: wrap; }

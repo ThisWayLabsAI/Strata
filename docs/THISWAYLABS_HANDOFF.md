@@ -2,6 +2,8 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+Latest UI polish: `fix/reference-upload-area`, based on `7b7add03`, replaces the native Choose Files control with a styled button/drop zone. Desktop shows drag/drop and click-to-browse instructions; coarse-pointer or narrow screens show a compact photo/file picker without drag instructions. The same validated upload pipeline handles both entry points, with disabled/busy protection and drag highlighting. Twelve focused browser checks passed at 320x568, 390x844 and 1280x800, plus all 20 reference regressions at phone/desktop sizes; screenshots were inspected. This is frontend-only: refresh browser assets, no service restart. Rollback base: `rollback/pre-reference-upload-area-20261015` -> `7b7add0367f719bf39fa0d8bf329feee5fb23d02`.
+
 ## User intent and implementation order
 
 Latest increment: `feature/reference-image-editing`, based on `374920cb`, adds reference generation/editing in Images using the existing runner and shared GPU queue. It follows the PNG recipes, Discuss in chat, 24 starter templates and saved-library release. See [IMAGE_RECIPES_AND_REFERENCES.md](IMAGE_RECIPES_AND_REFERENCES.md) for the input/API contract, pinned projector, verification, limitations and next steps.

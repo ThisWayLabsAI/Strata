@@ -29,6 +29,7 @@
       card.append(preview, label, role, actions); list.append(card);
     });
     $("img-reference-inputs").disabled = !ready || reading || running;
+    $("img-reference-upload").disabled = !ready || reading || running;
     $("img-operation").disabled = reading || running;
     $("img-go").textContent = edit ? "Edit image" : "Generate";
     $("img-go").disabled = running || reading || (edit && (!ready || !refs.length));
@@ -52,9 +53,27 @@
     catch (error) { notify(error); }
     finally { reading = false; render(); }
   }
-  $("img-reference-files").onchange = () => importing(async () => {
-    const files = [...$("img-reference-files").files]; $("img-reference-files").value = "";
+  const upload = $("img-reference-upload");
+  const importFiles = files => importing(async () => {
     for (const file of files) await add(file);
+  });
+  upload.onclick = () => $("img-reference-files").click();
+  $("img-reference-files").onchange = () => {
+    const files = [...$("img-reference-files").files]; $("img-reference-files").value = "";
+    return importFiles(files);
+  };
+  for (const type of ["dragenter", "dragover"]) upload.addEventListener(type, event => {
+    event.preventDefault(); event.stopPropagation();
+    const accepts = !upload.disabled && [...(event.dataTransfer?.types || [])].includes("Files");
+    upload.classList.toggle("dragging", accepts);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = accepts ? "copy" : "none";
+  });
+  upload.addEventListener("dragleave", event => {
+    if (!upload.contains(event.relatedTarget)) upload.classList.remove("dragging");
+  });
+  upload.addEventListener("drop", event => {
+    event.preventDefault(); event.stopPropagation(); upload.classList.remove("dragging");
+    if (!upload.disabled && event.dataTransfer?.files.length) importFiles([...event.dataTransfer.files]);
   });
   $("img-reference-add-url").onclick = () => importing(async () => {
     const url = new URL($("img-reference-url").value);
