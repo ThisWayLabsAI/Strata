@@ -82,18 +82,27 @@
       <form class="st-card img-form" id="img-form">
         <span class="card-title" id="img-title">Make an image</span>
         <textarea class="st-input img-prompt" id="img-prompt" rows="3" placeholder="Describe the image&hellip;" aria-label="Prompt"></textarea>
-        <div class="img-row">
+        <div class="img-options">
           <label class="st-field">Size
             <select class="st-input" id="img-size">
               <option>1024x1024</option><option>1536x1024</option><option>1024x1536</option>
               <option>768x768</option><option>512x512</option></select></label>
-          <label class="st-field">Seed
-            <input class="st-input" id="img-seed" type="number" min="0" placeholder="random"></label>
-          <button type="submit" class="st-btn st-btn--primary" id="img-go">Generate</button>
+          <div class="st-field">
+            <label class="st-label" for="img-seed-mode">Seed</label>
+            <select class="st-input" id="img-seed-mode"><option value="random">Random</option><option value="fixed">Fixed</option></select>
+            <label class="st-field" id="img-fixed-seed" hidden>Fixed seed
+              <input class="st-input" id="img-seed" type="number" min="0" max="9007199254740991" step="1" value="0" disabled></label>
+          </div>
         </div>
-        <span class="composer-hint" id="img-hint">One image at a time; a chat request waits for it (and the other way round).</span>
+        <label class="st-field">Recent seeds (last 10)
+          <select class="st-input" id="img-recent-seeds" disabled><option value="">No seeds used yet</option></select></label>
+        <p class="muted small">Successful image seeds are saved in this browser. Choose one to reuse it with Fixed.</p>
       </form>
       <div class="img-results" id="img-results"></div>
+    </div>
+    <div class="img-actions">
+      <span class="muted small" id="img-hint" role="status">One image at a time; chat waits while it generates.</span>
+      <button type="submit" form="img-form" class="st-btn st-btn--primary" id="img-go">Generate</button>
     </div>
   </section>
 

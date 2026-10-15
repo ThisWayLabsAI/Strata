@@ -754,6 +754,7 @@ function fitChatViewport() {
     root.style.removeProperty("--chat-viewport-top");
   }
   if (mobileChat) { autosize(); scrollDown(); }
+  if (mobileChat && tab === "images") requestAnimationFrame(keepImageInputVisible);
 }
 function applyChatLayout() {
   const viewport = document.querySelector('meta[name="viewport"]');
@@ -1168,12 +1169,58 @@ showTab(location.hash.slice(1) || "chat");
 poll();
 
 // ------------------------------------------------------------------ images (POST /v1/images/generations)
+const validImageSeed = (seed) => (typeof seed === "number" || (typeof seed === "string" && seed.trim() !== "")) &&
+  Number.isSafeInteger(Number(seed)) && Number(seed) >= 0;
+function keepImageInputVisible() {
+  const input = document.activeElement;
+  const content = document.querySelector(".view--images > .about");
+  if (tab !== "images" || !content.contains(input) || !input.matches("input, textarea, select")) return;
+  const field = input.getBoundingClientRect(), bounds = content.getBoundingClientRect();
+  if (field.bottom > bounds.bottom) content.scrollTop += field.bottom - bounds.bottom + 8;
+  else if (field.top < bounds.top) content.scrollTop += field.top - bounds.top - 8;
+}
+const savedImageSeed = store.get("imageSeed", {});
+$("img-seed-mode").value = savedImageSeed?.mode === "fixed" ? "fixed" : "random";
+$("img-seed").value = validImageSeed(savedImageSeed?.seed) ? String(savedImageSeed.seed) : "0";
+const savedImageSeeds = store.get("imageSeeds", []);
+let recentImageSeeds = Array.isArray(savedImageSeeds) ? savedImageSeeds.filter((item) =>
+  item && validImageSeed(item.seed) && typeof item.size === "string" && Number.isFinite(item.time)).slice(0, 10) : [];
+function updateImageSeedMode() {
+  const fixed = $("img-seed-mode").value === "fixed";
+  $("img-fixed-seed").hidden = !fixed;
+  $("img-seed").disabled = !fixed;
+  $("img-seed").required = fixed;
+  store.set("imageSeed", {mode: fixed ? "fixed" : "random", seed: $("img-seed").value});
+}
+function renderRecentImageSeeds() {
+  const select = $("img-recent-seeds");
+  select.replaceChildren(new Option(recentImageSeeds.length ? "Choose a seed to reuse" : "No seeds used yet", ""));
+  recentImageSeeds.forEach((item, index) => select.add(new Option(`${item.seed} · ${item.size} · ${new Date(item.time).toLocaleString()}`, String(index))));
+  select.disabled = !recentImageSeeds.length;
+}
+$("img-seed-mode").onchange = updateImageSeedMode;
+$("img-seed").oninput = updateImageSeedMode;
+$("img-recent-seeds").onchange = () => {
+  const value = $("img-recent-seeds").value;
+  const item = value !== "" ? recentImageSeeds[Number(value)] : null;
+  if (!item) return;
+  $("img-seed-mode").value = "fixed";
+  $("img-seed").value = String(item.seed);
+  updateImageSeedMode();
+  $("img-recent-seeds").value = "";
+};
+updateImageSeedMode();
+renderRecentImageSeeds();
 $("img-form").onsubmit = async (ev) => {
   ev.preventDefault();
+  if ($("img-go").disabled) return;
   const prompt = $("img-prompt").value.trim();
   if (!prompt) return;
   const body = {prompt, size: $("img-size").value, response_format: "b64_json"};
-  if ($("img-seed").value !== "") body.seed = Number($("img-seed").value);
+  if ($("img-seed-mode").value === "fixed") {
+    if (!validImageSeed($("img-seed").value)) { $("img-seed").reportValidity(); return; }
+    body.seed = Number($("img-seed").value);
+  }
   $("img-go").disabled = true;
   const t0 = performance.now();
   $("img-hint").textContent = "Generating\u2026 (a minute or more on a small GPU)";
@@ -1190,8 +1237,14 @@ $("img-form").onsubmit = async (ev) => {
       cap.textContent = `${j.size}, seed ${d.seed}, ${((performance.now() - t0) / 1000).toFixed(0)} s: ${prompt}`;
       fig.append(img, cap);
       $("img-results").prepend(fig);
+      if (validImageSeed(d.seed)) {
+        recentImageSeeds.unshift({seed: Number(d.seed), size: j.size || body.size, time: Date.now()});
+        recentImageSeeds = recentImageSeeds.slice(0, 10);
+      }
     }
-    $("img-hint").textContent = "Done. Right-click an image to save it.";
+    store.set("imageSeeds", recentImageSeeds);
+    renderRecentImageSeeds();
+    $("img-hint").textContent = "Done. Hold or right-click an image to save it.";
   } catch (e) {
     $("img-hint").textContent = "";
     toast("error", "No image", String(e.message || e), 8000);

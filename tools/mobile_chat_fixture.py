@@ -8,12 +8,14 @@ Never use this fixture as a real API server or expose it beyond localhost.
 from __future__ import annotations
 
 import json
+import itertools
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
+IMAGE_SEEDS = itertools.count(1000)
 
 
 class Fixture(SimpleHTTPRequestHandler):
@@ -53,6 +55,16 @@ class Fixture(SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if urlsplit(self.path).path == "/v1/images/generations":
+            request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            if request.get("prompt") == "error":
+                self.json_reply({"error": {"message": "Fixture image failure"}}, 500)
+                return
+            time.sleep(0.02)
+            self.json_reply({"size": request.get("size", "1024x1024"), "data": [{
+                "seed": request["seed"] if "seed" in request else next(IMAGE_SEEDS),
+                "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="}]})
+            return
         if urlsplit(self.path).path != "/v1/chat/completions":
             self.send_error(404)
             return

@@ -191,7 +191,17 @@ main { flex: 1; min-height: 0; display: flex; }
 /* Images tab (POST /v1/images/generations) */
 .img-form{display:flex;flex-direction:column;gap:12px}
 .img-prompt{height:auto;padding:10px 14px;resize:vertical}
-.img-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.view--images { overflow: hidden; }
+.view--images > .about { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
+.img-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.img-options .st-input, #img-recent-seeds { min-width: 0; width: 100%; }
+.img-actions { flex: none; width: 100%; max-width: 860px; margin: 0 auto; padding: 12px 24px; display: flex;
+  align-items: center; gap: 12px; background: var(--st-surface); border-top: 1px solid var(--st-line); }
+.img-actions #img-hint { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.img-actions #img-go { flex: none; min-height: 44px; }
+html[data-mobile-chat="true"] .view--images > .about { padding: 12px max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px)); }
+html[data-mobile-chat="true"] .img-actions { padding: 8px max(12px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+html[data-mobile-chat="true"] .img-prompt { resize: vertical; min-height: 80px; }
 .img-results{display:flex;flex-direction:column;gap:12px}
 .img-results figure{margin:0}
 .img-results img{max-width:100%;border-radius:var(--st-r-lg);display:block}

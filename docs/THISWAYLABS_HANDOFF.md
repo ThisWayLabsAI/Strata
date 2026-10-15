@@ -13,6 +13,7 @@ Next: chat image generation with persistent inline results and safe GPU handoff.
 - `main` mirrors upstream and must remain clean of customizations.
 - `thiswaylabs` is the stable customized branch. Live code is `C:\AI\Strata`; development is `C:\AI\Strata-dev`.
 - Mobile work is on `fix/mobile-chat`, based on `8e798771` (the API Monitor link and original plans).
+- The next frontend fix is on `fix/images-mobile-seeds`, based on mobile commit `1c77ddf9`. It fixes Images keyboard access and adds Random/Fixed seeds and recent-seed reuse.
 - Existing later-feature branches: `feature/chat-images` and `feature/model-switcher`. Update them from stable before implementation; do not discard existing work.
 - The API Monitor link is deployed in the Monitor tab, opens `/api-monitor` in another tab, and needs no config change.
 - GitHub CLI queries failed with HTTP 401. No PR or GitHub merge was performed. Local development/stable deployment uses committed fast-forward history transferred with a Git bundle. Both local stable checkouts are ahead of `origin/thiswaylabs`; publication remains pending authentication. Never force-push to resolve this.
@@ -29,6 +30,12 @@ Files: `serve/web/index.html`, `serve/web/app.css`, `serve/web/app.js`.
 - Long code and tables scroll within the transcript. Tool results wrap. Touch Enter adds a newline; use Send to submit. Desktop Enter and Shift+Enter behavior and IME composition are preserved.
 
 ## Verification and remaining acceptance
+
+The user confirmed the mobile layout works, then reported that the Images keyboard covered Generate and part of Seed. The Images fix gives the form/results a scrolling viewport and Generate a separate footer. Visual-viewport resize also scrolls the focused image input into view. Size and Seed sit beside each other; Fixed reveals the integer seed field. Random omits the API seed field, preserving backend random generation. Seed zero is valid. The frontend bounds fixed seeds to safe JavaScript integers to prevent rounding.
+
+`strata.imageSeed` stores the chosen mode and fixed input; `strata.imageSeeds` stores the newest 10 successful returned seeds with size and timestamp. Repeated seeds count as separate uses. Failed requests do not enter the log. Selecting a recent seed switches to Fixed and fills its value without generating or changing size/prompt. Storage is local to the browser; existing image result persistence is unchanged.
+
+Image UI verification: `tools/image_ui_checks.js` runs against the same fixture, which now returns tiny fake images without GPU work. Its 19 checks passed at 320x568, 390x844, 844x390, 1280x800, 390x300 and 390x330. They cover the visible/clickable Generate footer, automatic focused-field scrolling, seed alignment, Random/Fixed request bodies, zero, seed reuse, bounded history, failure handling and duplicate-submit prevention. Random/Fixed settings and all ten recent seeds passed refresh persistence checks. All 19 existing `serve.test_images` tests and the 33 mobile-chat regression checks passed. Actual phone keyboard verification of this Images fix remains pending.
 
 Use the isolated fixture, never a live chat, for the destructive browser checks (they replace fixture history):
 
@@ -52,6 +59,8 @@ This is Chromium coverage, not actual Safari/Android keyboard validation. Real i
 The user authorized deployment in this chat; the mobile frontend is deployed locally for phone verification after automated checks. Check the actual live commit with `git -C C:\AI\Strata rev-parse HEAD` rather than assuming a remote branch is up to date.
 
 The pre-mobile source is `8e79877102340a8859190351d186c99fd9110273`. The deployment creates `rollback/pre-mobile-chat-20261015` in the live checkout. That commit includes the API Monitor link. The earlier `rollback/pre-api-monitor-link-20261015` points to `296b59d2`.
+
+The pre-Images-controls source is `1c77ddf9aed5740fd2849e68514124253be9667f`, preserved as `rollback/pre-image-controls-20261015` for the Images fix rollout. This keeps the previous mobile implementation and API Monitor link. No engine restart, model/config migration or new dependency is needed.
 
 Only source files, fixture/check tools, and docs are part of the mobile commit. The running server reads the HTML/JS/CSS from disk, so this source-only update needs a browser refresh and no engine restart. For rollback, verify tracked edits first, then switch the live source to the named rollback branch; refresh browser assets. Switching frontend source does not delete localStorage. Do not use reset --hard or clean -fdx. Later backend/dependency changes require their own stop/restart/build procedure.
 
