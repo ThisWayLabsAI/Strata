@@ -17,7 +17,7 @@
         if (edit && index && value === "source") continue;
         role.add(new Option(value, value));
       }
-      role.value = ref.role; role.disabled = running || reading || (edit && index === 0); role.onchange = () => { ref.role = role.value; };
+      role.value = ref.role; role.disabled = running || reading || (edit && index === 0); role.onchange = () => { ref.role = role.value; window.refreshImageTemplateContext?.(); };
       const actions = document.createElement("div"); actions.className = "img-template-actions";
       for (const [text, action, disabled] of [
         ["Move up", () => { [refs[index - 1], refs[index]] = [refs[index], refs[index - 1]]; render(); }, !index],
@@ -34,6 +34,7 @@
     $("img-go").textContent = edit ? "Edit image" : "Generate";
     $("img-go").disabled = running || reading || (edit && (!ready || !refs.length));
     $("img-stop").hidden = !running;
+    window.refreshImageTemplateContext?.();
   }
   async function add(file) {
     if (!ready) throw new Error("Reference editing is not configured on this server.");
@@ -111,7 +112,6 @@
     request() { return refs.map(({data, name, role}) => ({data, name, role})); },
     begin() { running = true; controller = new AbortController(); render(); return controller.signal; },
     end() { running = false; controller = null; render(); },
-    template(value) { $("img-operation").value = value.operation === "edit" ? "edit" : "generate"; render(); },
     restore(value) {
       refs.length = 0; $("img-operation").value = value.operation === "edit" ? "edit" : "generate"; render();
       if (value.references?.length) imageRecipeInfo("This recipe used reference images. Upload the originals in the recorded order; the PNG stores roles and hashes, not the source files.");

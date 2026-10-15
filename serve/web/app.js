@@ -1241,6 +1241,20 @@ $("img-recent-seeds").onchange = () => {
 updateImageSeedMode();
 renderRecentImageSeeds();
 let activeImageTemplate = "";
+let appliedImageTemplateContext = null;
+function imageTemplateFingerprint() {
+  return JSON.stringify({operation: $("img-operation").value,
+    references: (window.StrataReferences?.request() || []).map(({name, role}) => ({name, role}))});
+}
+function refreshImageTemplateContext() {
+  if (!appliedImageTemplateContext) return;
+  imageRecipeInfo(imageTemplateFingerprint() === appliedImageTemplateContext.fingerprint ? appliedImageTemplateContext.info :
+    "Mode or references changed. Reapply the template to update its instructions; your prompt edits have been kept.");
+}
+function imageTemplateBase(prompt) {
+  const prefix = appliedImageTemplateContext?.prefix;
+  return prefix && prompt.startsWith(prefix) ? prompt.slice(prefix.length) : prompt;
+}
 const savedImageTemplates = store.get("imageTemplates", []);
 let imageTemplates = Array.isArray(savedImageTemplates) ? savedImageTemplates.filter((item) => item &&
   typeof item.id === "string" && item.id.startsWith("local-") && item.id.length <= 100 &&
@@ -1271,7 +1285,6 @@ function persistImageTemplates() {
   return false;
 }
 function restoreImageSettings(value) {
-  window.StrataReferences?.template(value);
   $("img-prompt").value = value.prompt;
   if ([...$("img-size").options].some((option) => option.value === value.size)) $("img-size").value = value.size;
   else toast("warn", "Choose a supported size", `The original size was ${value.size}; the current size is kept.`);
@@ -1283,6 +1296,7 @@ function restoreImageSettings(value) {
 }
 function useImageRecipe(value) {
   const metadata = StrataImage.recipe(value);
+  appliedImageTemplateContext = null;
   restoreImageSettings(metadata);
   imageRecipeInfo(`Loaded prompt, seed and reported settings. Original model: ${metadata.model || "not recorded"}. New images use this server's configured image model.`);
   window.StrataReferences?.restore(metadata);
@@ -1298,12 +1312,25 @@ $("img-apply-template").onclick = () => {
   const item = [...StrataImage.starters, ...imageTemplates].find((entry) => entry.id === $("img-template").value);
   if (!item) return;
   const subject = $("img-subject").value.trim();
-  if (item.group && !subject) { toast("info", "Add a subject or scene", "Describe what the starter template should depict."); $("img-subject").focus(); return; }
-  restoreImageSettings({...item, prompt: item.group ? item.prompt.replace("{subject}", () => subject) : item.prompt, seed: item.seed ?? null});
-  imageRecipeInfo(`Applied ${item.name}. Revise the prompt below before generating.`);
-  $("img-template").closest("details").open = false;
-  document.querySelector(".view--images > .about").scrollTop = 0;
+  applyImageTemplate(item, subject);
 };
+function applyImageTemplate(item, subject = "") {
+  const operation = $("img-operation").value, references = window.StrataReferences?.request() || [];
+  if (item.group && operation === "generate" && !subject && !references.length) {
+    toast("info", "Add a subject or scene", "Describe what the starter template should depict, or attach a reference."); $("img-subject").focus(); return;
+  }
+  const prepared = StrataImage.prepareTemplate(item, subject, operation, references);
+  if (prepared.prompt.length > 16000) { toast("warn", "Template prompt too long", "Shorten the saved prompt before adding mode and reference instructions (16,000 characters maximum)."); return; }
+  restoreImageSettings({...item, prompt: prepared.prompt, seed: item.seed ?? null});
+  const info = `Applied ${item.name || item.templateName || "image recipe"} for ${operation === "edit" ? "Edit" : "Generate"} with ${references.length} reference image(s). Current mode and references kept. Review the prompt before generating.` +
+    (item.operation && item.operation !== operation ? ` This template was saved for ${item.operation}; check any manually written instructions.` : "") +
+    (item.model ? ` Original model: ${item.model}.` : "");
+  appliedImageTemplateContext = {prefix: prepared.prefix, fingerprint: imageTemplateFingerprint(), info};
+  imageRecipeInfo(info);
+  $("img-template").closest("details").open = false;
+  showTab("images");
+  document.querySelector(".view--images > .about").scrollTop = 0;
+}
 $("img-save-template").onclick = () => {
   const name = $("img-template-name").value.trim(), prompt = $("img-prompt").value.trim();
   const seed = $("img-seed-mode").value === "fixed" ? Number($("img-seed").value) : null;
@@ -1314,7 +1341,7 @@ $("img-save-template").onclick = () => {
   }
   const existing = imageTemplates.find((item) => item.name === name);
   if (!existing && imageTemplates.length >= 30) { toast("warn", "Template library full", "Delete a saved template before adding another."); return; }
-  const item = {id: existing?.id || `local-${crypto.randomUUID()}`, name, prompt, size: $("img-size").value, seed, steps};
+  const item = {id: existing?.id || `local-${crypto.randomUUID()}`, name, prompt: imageTemplateBase(prompt), size: $("img-size").value, seed, steps};
   if ($("img-operation").value === "edit") item.operation = "edit";
   imageTemplates = imageTemplates.filter((entry) => entry.id !== item.id); imageTemplates.unshift(item);
   const persisted = persistImageTemplates(); renderImageTemplates(); activeImageTemplate = name;
@@ -1348,7 +1375,7 @@ function showImageResult(base64, value, annotate = true) {
   const reference = document.createElement("button"); reference.type = "button"; reference.className = "st-btn st-btn--secondary";
   reference.textContent = "Edit this image"; reference.onclick = () => window.StrataReferences?.useResult(imageData);
   reference.disabled = !window.StrataReferences?.ready(); actions.append(reference);
-  for (const [label, handler] of [["Use as template", () => useImageRecipe(metadata)], ["Discuss in chat", () => discussImageRecipe(metadata, url)]]) {
+  for (const [label, handler] of [["Use as template", () => applyImageTemplate(metadata)], ["Discuss in chat", () => discussImageRecipe(metadata, url)]]) {
     const button = document.createElement("button"); button.type = "button"; button.className = "st-btn st-btn--secondary";
     button.textContent = label; button.onclick = handler; actions.append(button);
   }
@@ -1388,6 +1415,7 @@ $("img-form").onsubmit = async (ev) => {
     body.steps = steps;
   }
   const templateName = activeImageTemplate;
+  const templatePrompt = imageTemplateBase(prompt);
   if ($("img-seed-mode").value === "fixed") {
     if (!validImageSeed($("img-seed").value)) { $("img-seed").reportValidity(); return; }
     body.seed = Number($("img-seed").value);
@@ -1405,6 +1433,7 @@ $("img-form").onsubmit = async (ev) => {
         templateName, operation: j.operation, references: j.references,
         settings: {steps: j.strata?.steps ?? body.steps, backend: j.strata?.backend, quant: j.strata?.quant}};
       if (metadata.prompt !== prompt) metadata.originalPrompt = prompt;
+      if (templatePrompt !== prompt) metadata.templatePrompt = templatePrompt;
       showImageResult(d.b64_json, metadata);
       if (validImageSeed(d.seed)) {
         recentImageSeeds.unshift({seed: Number(d.seed), size: j.size || body.size, time: Date.now()});

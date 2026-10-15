@@ -42,9 +42,11 @@
     check(saved.operation === "edit" && !saved.references, "Saved edit template records mode without source bytes");
     $("img-operation").value = "generate"; $("img-operation").dispatchEvent(new Event("change"));
     $("img-template").value = saved.id; $("img-template").dispatchEvent(new Event("change")); $("img-apply-template").click();
-    check($("img-operation").value === "edit", "Saved template restores Edit mode");
+    check($("img-operation").value === "generate" && StrataReferences.request().length === 2, "Saved template preserves current mode and references");
     $("img-delete-template").click();
     result.querySelectorAll("button")[1].click();
+    check(StrataReferences.request().length === 2 && $("img-operation").value === "generate", "Result template preserves current mode and references");
+    await importImageRecipe(new File([StrataImage.fromBase64(result.querySelector("a").href.split(",")[1])], "edit.png", {type:"image/png"}));
     check(StrataReferences.request().length === 0 && $("img-go").disabled && $("img-recipe-info").textContent.includes("originals"), "Loading edit recipe requires originals again");
     result.querySelector("button").click(); await until(() => StrataReferences.request().length === 1 && !$("img-operation").disabled);
     check($("img-operation").value === "edit", "Generated output can become a new source");

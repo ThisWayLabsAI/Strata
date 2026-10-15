@@ -93,3 +93,44 @@ test("Edit provenance round-trips without embedding references or source URLs", 
     assert.throws(() => api.recipe({...metadata, references}), /reference provenance/);
   }
 });
+
+test("Every starter keeps the original Generate prompt without references", () => {
+  for (const item of api.starters) {
+    const result = api.prepareTemplate(item, "a café cat with $&", "generate", []);
+    assert.equal(result.prompt, item.prompt.replace("{subject}", () => "a café cat with $&"));
+    assert.equal(result.prefix, "");
+  }
+});
+test("Every Edit starter preserves source identity, requested changes and text-free treatment", () => {
+  for (const item of api.starters) {
+    const result = api.prepareTemplate(item, "turn the background blue", "edit", [{role:"source"}]);
+    assert.match(result.prompt, /Edit image 1/);
+    assert.match(result.prompt, /Preserve the main subject's identity/);
+    assert.match(result.basePrompt, /Requested changes: turn the background blue/);
+    assert.match(result.basePrompt, /the subject/);
+    assert.doesNotMatch(result.basePrompt, /image [123]/);
+    assert.match(result.prompt, /No text, letters/);
+    assert.equal(result.prompt, result.prefix + result.basePrompt);
+  }
+});
+test("Reference roles and numbers follow current order, without leaking names or bytes", () => {
+  const item = api.starters[0], references = [{role:"style",name:"private",data:"secret"}, {role:"identity"}, {role:"composition"}];
+  const result = api.prepareTemplate(item, "", "generate", references);
+  assert.match(result.prompt, /Generate a new image/);
+  assert.match(result.prompt, /Image 1 — style/);
+  assert.match(result.prompt, /Image 2 — identity/);
+  assert.match(result.prompt, /Image 3 — composition/);
+  assert.match(result.basePrompt, /the subject/);
+  assert.doesNotMatch(result.basePrompt, /image [123]/);
+  assert.doesNotMatch(result.prompt, /private|secret|Edit image 1/);
+  assert.match(api.prepareTemplate(item, "", "generate", [{role:"style"}]).basePrompt, /a new scene/);
+});
+test("Saved templates and PNG base prompts adapt without accumulating generated context", () => {
+  const custom = {prompt:"Keep my custom design.", operation:"edit"};
+  const first = api.prepareTemplate(custom, "", "edit", [{role:"source"}]);
+  const recovered = api.read(api.write(png, {...metadata, prompt:first.prompt, templatePrompt:first.basePrompt}));
+  const reused = api.prepareTemplate({...recovered, operation:"edit"}, "", "generate", []);
+  assert.equal(reused.basePrompt, custom.prompt);
+  assert.match(reused.prompt, /Generate a new image/);
+  assert.doesNotMatch(reused.prompt, /Edit image 1/);
+});

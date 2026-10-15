@@ -1,6 +1,6 @@
 # Image recipes, templates and reference editing
 
-Updated 2026-10-15. This records the implemented recipe/template increment and the recommended editing follow-up.
+Updated 2026-10-15. This records implemented recipes, context-aware templates and reference editing, plus remaining chat integration.
 
 ## Implemented in Images
 
@@ -16,7 +16,11 @@ Steps are optional (1–100); an empty field keeps the server default. Recipes r
 
 ## Starter and saved templates
 
-The collapsible library contains 24 editable starters. Add a subject/scene and apply one to fill the prompt and suggested size. Applying a template does not generate an image.
+The collapsible library contains 24 editable starters. In Generate, enter a subject/scene or attach references. In Edit, use the subject field for optional requested changes; leave it empty to apply the style or sheet treatment. Apply fills the visible prompt and suggested size without generating an image. All template entry points, including a result's Use as template, preserve the selected operation and current reference files, roles and order. Explicit Load recipe from PNG remains a separate restore action: it restores the recorded operation and clears current references so originals can be supplied deliberately.
+
+Generate prompts describe a new scene; Edit prompts identify image 1 as the source and preserve identity/design by default. Composition guidance, requested changes and sheet layouts may change framing. Generated guidance numbers current references and describes source, identity, style and composition roles. Role labels are translated into visible prompt instructions, not separate backend conditioning switches. These instructions are editable and do not guarantee model fidelity. Generate with no references retains the exact earlier starter prompt.
+
+Applying uses the current mode/reference snapshot. Later changes to mode, roles, count or order show a Reapply notice without overwriting the draft. Reapply rebuilds the guidance once; it does not append duplicate context. Saved templates record their original Edit mode as context, but never override the currently selected operation. A mode mismatch asks the user to review manual instructions.
 
 | Group | Starters |
 | --- | --- |
@@ -26,7 +30,11 @@ The collapsible library contains 24 editable starters. Add a subject/scene and a
 
 All sheet prompts explicitly request consistent designs and no letters, numbers, labels, captions, signatures, logos or watermarks. They are instructions to the generator, not a measured guarantee of text-free output or perfect tileability.
 
-Save template stores the current prompt, size, fixed/random choice, seed and optional steps in this browser (`strata.imageTemplates`). A matching name updates an existing saved template; different names create separate entries, up to 30. Saved templates can be applied or deleted. Storage failure is reported as temporary in-memory availability. No server config or shared files are modified.
+Save template stores the base treatment and requested changes, size, fixed/random choice, seed and optional steps in this browser (`strata.imageTemplates`). An unchanged generated context prefix is excluded so future applies rebuild mode/reference guidance. If the user edits that prefix, their authored text is kept and must be reviewed for manual image references. A matching name updates an existing saved template; different names create separate entries, up to 30. Saved templates can be applied or deleted. Storage failure is reported as temporary in-memory availability. No server config or shared files are modified.
+
+New template-based PNG recipes can include an optional `templatePrompt` string with the reusable base treatment. The actual submitted/returned prompt, seed and reference provenance remain the authoritative generation record. Use as template rebuilds the context from that base for current inputs. Older PNGs/saved templates without the base remain readable; manually written reference instructions in them are retained, so review them before reuse. Expanded template prompts over the server's 16,000-character limit are refused before changing the draft/settings.
+
+Context-aware template verification: 16 Node tests cover all 24 starters, unchanged no-reference Generate text, Edit preservation, source/style/identity/composition guidance, neutral base text and PNG base-prompt round-trip. The 23 context checks, 21 reference checks and 25 recipe checks pass at 320x568, 390x844, 844x390, 1280x800 and 390x300 in Chromium. They verify complete reference preservation, reordering/role changes, stale notices, no duplicated guidance, saved requested changes, visible prompt submission and result reuse. No new GPU/model-quality run was needed for this frontend increment; actual phone checks remain open.
 
 ## Verification
 

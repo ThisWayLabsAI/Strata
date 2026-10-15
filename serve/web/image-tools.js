@@ -18,8 +18,8 @@
         typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256))) throw new Error("Invalid reference provenance in PNG recipe.");
       out.references = value.references.map(({name, role, sha256}) => ({name, role, sha256}));
     }
-    for (const key of ["model", "createdAt", "originalPrompt", "templateName"]) {
-      if (typeof value[key] === "string" && value[key].length <= (key === "originalPrompt" ? 16384 : 256)) out[key] = value[key];
+    for (const key of ["model", "createdAt", "originalPrompt", "templateName", "templatePrompt"]) {
+      if (typeof value[key] === "string" && value[key].length <= (["originalPrompt", "templatePrompt"].includes(key) ? 16384 : 256)) out[key] = value[key];
     }
     out.settings = {};
     if (value.settings && Number.isInteger(value.settings.steps) && value.settings.steps >= 1 && value.settings.steps <= 100) out.settings.steps = value.settings.steps;
@@ -129,5 +129,32 @@
     ["storyboard", "Storyboard sequence — no text", "Sheets", "A six-panel visual storyboard of {subject}. Tell one coherent sequence through distinct cinematic shots, clear action and readable staging. Keep character identity, costume, props, location and lighting consistent across panels; use clear gutters, intentional camera angles and restrained grayscale shading. No panel numbering or speech balloons. " + noText],
     ["icons", "Matching icon set — no text", "Sheets", "A coherent set of twelve distinct icons representing {subject}. Consistent stroke weight, corner shapes, visual scale, limited color palette, simple readable silhouettes, generous uniform spacing on a plain light background. No badges with lettering. " + noText],
   ].map(([id, name, group, prompt]) => ({id, name, group, prompt, size: group === "Sheets" ? "1536x1024" : "1024x1024"}));
-  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters};
+  function prepareTemplate(item, subject, operation, references) {
+    const edit = operation === "edit";
+    const identity = references.findIndex(ref => ["source", "identity"].includes(ref.role));
+    const inferred = identity >= 0 ? "the subject" : "a new scene";
+    const base = typeof item.templatePrompt === "string" ? item.templatePrompt : item.prompt;
+    let prompt = item.group ? base.replace("{subject}", () => edit ? "the subject" : subject || inferred) : base;
+    if (edit && item.group && subject) prompt = `Requested changes: ${subject}\n\n${prompt}`;
+    const lines = [];
+    if (edit) {
+      lines.push("Edit image 1 (the source image). Apply the requested changes and template treatment below. Preserve the main subject's identity, recognizable features and design. Keep the source framing and composition unless requested changes, composition guidance or sheet layout require otherwise.");
+    } else if (references.length) {
+      lines.push("Generate a new image using the references below. Create a new scene; do not assume image 1 must be edited in place.");
+    } else if (item.operation === "edit") {
+      lines.push("Generate a new image using the template description below. This is a new scene, not an edit of an existing source image.");
+    }
+    const guidance = {
+      source: "Use its subject or object design as a reference; adapt the pose, setting and layout to the requested scene.",
+      identity: "Preserve the referenced subject's identity and recognizable features; do not copy its background unless requested.",
+      style: "Use its visual style, materials, lighting and palette as guidance; do not copy its subject's identity unless requested.",
+      composition: "Use its framing, layout and spatial arrangement as guidance; do not copy its subject's identity unless requested."
+    };
+    references.forEach((ref, index) => lines.push(edit && index === 0 ? "Image 1 — source: the image to modify." :
+      `Image ${index + 1} — ${ref.role}: ${guidance[ref.role] || guidance.identity}`));
+    if (references.length) lines.push("Use each reference only for its assigned role. The requested changes take precedence if reference guidance conflicts.");
+    const prefix = lines.length ? lines.join("\n") + "\n\nTemplate treatment:\n" : "";
+    return {prompt: prefix + prompt, prefix, basePrompt: prompt};
+  }
+  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters, prepareTemplate};
 })();
