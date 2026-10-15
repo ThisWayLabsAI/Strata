@@ -105,6 +105,7 @@ async function loadHealth() {
                                           : "Attach a text file (or drop it here)";
     $("chat-empty-sub").textContent = `${health.model} runs on this PC. Nothing leaves it.`;
     $("tab-btn-images").hidden = !health.image_generation;
+    $("chat-image-row").hidden = !health.chat_image_generation;
     if (location.hash === "#images" && health.image_generation) showTab("images");
   } catch (e) {
     setTimeout(loadHealth, 2000);
@@ -575,9 +576,14 @@ let readingAnchor = null;
 const mobileViewport = matchMedia("(max-width: 900px), (pointer: coarse)");
 
 function saveChat() {
-  store.set("chat", messages.map((m) => ({...m, images: (m.images || []).map((i) => ({name: i.name})),
-                                           files: (m.files || []).map((f) => ({name: f.name}))})));
+  const saved = messages.map((m) => ({...m, images: (m.images || []).map((i) => ({name: i.name})),
+                                         files: (m.files || []).map((f) => ({name: f.name}))}));
+  store.set("chat", saved);
+  return JSON.stringify(store.get("chat", null)) === JSON.stringify(saved);
 }
+StrataChatImages.recover(messages);
+$("chat-image-enabled").checked = store.get("chatImageTools", false) === true;
+$("chat-image-enabled").onchange = () => store.set("chatImageTools", $("chat-image-enabled").checked);
 function timeStr(t) { return new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); }
 
 function msgEl(m, i) {
@@ -654,7 +660,7 @@ function answerHtml(m) {
     const at = Math.min(Math.max(t.at || 0, pos), m.text.length);
     if (at > pos) html += markdown(m.text.slice(pos, at));
     pos = at;
-    html += toolHtml(t, k);
+    html += toolHtml(t, k) + StrataChatImages.html(t);
   });
   return html + markdown(m.text.slice(pos));
 }
@@ -675,7 +681,9 @@ function updateAssistant(el, m, streaming) {
   const det = el.querySelector("details.think");
   if (m.reasoning) {
     det.hidden = false;
-    const thinkingNow = streaming && !m.text;
+    const lastTool = m.tools?.at(-1);
+    const waitingForImage = lastTool?.image && m.reasoning.length <= lastTool.rat;
+    const thinkingNow = streaming && !m.text && !waitingForImage;
     el.querySelector(".think-title").textContent = thinkingNow ? "Thinking…" :
       m.thinkSecs != null ? `Thought for ${fmt(m.thinkSecs, 1)} s` : "Thoughts";
     const body = el.querySelector(".thinking");
@@ -689,6 +697,7 @@ function updateAssistant(el, m, streaming) {
   if (m.error) {
     bubble.innerHTML = `<div class="msg-error"></div>`;
     bubble.firstChild.textContent = m.error;
+    if (m.tools?.some(tool => tool.image)) bubble.insertAdjacentHTML("beforeend", answerHtml(m));
   } else if (!m.text && streaming && !(m.tools && m.tools.length)) {
     bubble.innerHTML = m.reasoning ? `<span class="muted cursor">Writing</span>` : `<span class="cursor"></span>`;
   } else {
@@ -696,6 +705,7 @@ function updateAssistant(el, m, streaming) {
     if (streaming) bubble.classList.add("cursor"); else bubble.classList.remove("cursor");
   }
   el.querySelector(".meta-text").textContent = m.meta || (streaming ? "" : m.stopped ? "Stopped" : "");
+  StrataChatImages.decorate(el, m);
   el.querySelector("[data-msg-copy]").hidden = streaming || !m.text;
 }
 function renderChat() {
@@ -778,6 +788,10 @@ if (window.visualViewport) {
 }
 
 $("chat").addEventListener("click", (e) => {
+  if (e.target.closest("[data-chat-image-download], [data-chat-image-template]")) {
+    const message = messages[+e.target.closest(".st-msg").dataset.i];
+    StrataChatImages.action(e, message); return;
+  }
   const cc = e.target.closest("[data-code-copy]");
   if (cc) { copyText(cc.closest(".st-code").querySelector("pre").textContent, cc); return; }
   const mc = e.target.closest("[data-msg-copy]");
@@ -857,7 +871,7 @@ async function send() {
   renderAttachments();
   $("input").value = "";
   autosize();
-  const m = {role: "assistant", text: "", reasoning: "", time: Date.now()};
+  const m = {id:crypto.randomUUID(), role: "assistant", text: "", reasoning: "", time: Date.now()};
   messages.push(m);
   renderChat();
   const el = $("chat").lastElementChild;
@@ -876,6 +890,8 @@ async function send() {
   if (settings.max) body.max_tokens = +settings.max;
   if (projectionLoaded()) body.experimental_speed_projection = !!settings.esp;
   if (settings.mcp !== false && mcpInfo.tools > 0) body.strata_mcp = true;   // this server may run MCP tools for it
+  if (health.chat_image_generation && $("chat-image-enabled").checked) body.strata_images = true;
+  saveChat();
 
   let firstAt = null, thinkStart = null, usage = null, frame = 0;
   const paint = () => { frame = 0; updateAssistant(el, m, true); scrollDown(); };
@@ -906,6 +922,10 @@ async function send() {
         if (j.error) throw new Error(j.error.message || "the engine reported an error");
         if (j.usage) usage = j.usage;
         if (j.strata_mcp) onTool(m, j.strata_mcp);
+        if (j.strata_image) {
+          if (thinkStart && m.thinkSecs == null) m.thinkSecs = (performance.now() - thinkStart) / 1000;
+          await StrataChatImages.onEvent(m, j.strata_image);
+        }
         const d = (j.choices && j.choices[0] && j.choices[0].delta) || {};
         const lastTool = m.tools && m.tools.length ? m.tools[m.tools.length - 1] : null;   // a new round after a tool
         if (d.reasoning_content) {
@@ -937,6 +957,7 @@ async function send() {
     m.meta = "Stopped";
   }
   for (const t of m.tools || []) if (t.state === "writing" || t.state === "running") { t.state = "skipped"; t.ms = null; }
+  StrataChatImages.finish(m, !!m.stopped);
   const ran = (m.tools || []).filter((t) => t.state === "done" || t.state === "error").length;
   if (ran) m.meta = `${m.meta ? `${m.meta} · ` : ""}${ran} tool call${ran > 1 ? "s" : ""}`;
   if (m.limit) m.meta = `${m.meta || ""} · stopped at the limit of ${m.limit} tool rounds (mcp.max_rounds)`;
@@ -966,10 +987,13 @@ $("new-btn").onclick = () => {
   if (busy) { toast("warn", "Still writing", "Stop the answer first."); return; }
   if (!messages.length) return;
   const backup = messages;
+  let undone = false;
+  const imageIds = backup.flatMap(message => (message.tools || []).map(tool => tool.image?.id).filter(Boolean));
   messages = [];
   saveChat();
   renderChat();
-  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { messages = backup; saveChat(); renderChat(); }});
+  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; saveChat(); renderChat(); }});
+  setTimeout(() => { if (!undone) StrataChatImages.remove([...new Set(imageIds)]); }, 6500);
 };
 $("export-btn").onclick = () => {
   if (!messages.length) { toast("info", "Nothing to save yet"); return; }
@@ -977,7 +1001,7 @@ $("export-btn").onclick = () => {
     `<details><summary>Tool ${t.server ? `${t.server} / ` : ""}${t.tool || t.name}${t.ok ? "" : " (error)"}</summary>\n\n` +
     `\`\`\`json\n${JSON.stringify(t.arguments || {}, null, 2)}\n\`\`\`\n\n\`\`\`\n${t.result}\n\`\`\`\n\n</details>\n\n`).join("");
   const md = messages.map((m) => m.role === "user" ? `## You\n\n${m.text}\n` :
-    `## ${health.model}\n\n${m.reasoning ? `<details><summary>Thinking</summary>\n\n${m.reasoning}\n\n</details>\n\n` : ""}${tools(m)}${m.text || m.error || ""}\n`).join("\n");
+    `## ${health.model}\n\n${m.reasoning ? `<details><summary>Thinking</summary>\n\n${m.reasoning}\n\n</details>\n\n` : ""}${tools(m)}${m.text || m.error || ""}${StrataChatImages.exported(m)}\n`).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([md], {type: "text/markdown"}));
   a.download = `strata-chat-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`;

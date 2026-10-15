@@ -55,7 +55,7 @@ Configure `images.llm_vision` with the compatible projector path. The optional i
 
 Pinned projector: official `Qwen/Qwen3-VL-8B-Instruct-GGUF`, revision `f982a07559d4a2f6c8744d840bf6fccab30eea96`, `mmproj-Qwen3VL-8B-Instruct-F16.gguf`, 1,159,029,824 bytes, SHA-256 `ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38`. On this PC it is under `C:\AI\Strata-data\models\qwen-image-2.1-turbo\vision`. Existing diffusion weights, text encoder and VAE are unchanged.
 
-PNG recipes optionally include `operation` and ordered `references` containing name, role and normalized SHA-256. They contain neither reference pixels nor source URLs. Loading a recipe clears current references and requires the originals again for Edit. Save template remembers Edit mode, but never stores reference bytes. Browser refresh clears uploads. Keep originals; a portable reference bundle is still a follow-up. Discuss in chat continues to attach the result and recipe; chat cannot yet call generation/editing as a tool.
+PNG recipes optionally include `operation` and ordered `references` containing name, role and normalized SHA-256. They contain neither reference pixels nor source URLs. Loading a recipe clears current references and requires the originals again for Edit. Save template remembers Edit mode, but never stores reference bytes. Browser refresh clears uploads. Keep originals; a portable reference bundle is still a follow-up. Discuss in chat attaches the result and recipe. Chat now offers opt-in text-to-image generation with inline saved results; [see the chat image contract](CHAT_IMAGES.md). Reference editing through chat remains a follow-up.
 
 Verification: 43 Python image/reference/monitor tests and 12 Node metadata tests pass. The 20 reference checks, 25 recipe checks and 23 seed/keyboard checks pass at 320x568, 390x844, 844x390, 1280x800 and 390x300; all 33 mobile-chat regressions pass at 320x568. No browser JavaScript errors reported. Real phone keyboard/download checks remain open.
 
@@ -65,7 +65,7 @@ Hardware smoke test: NVIDIA GeForce RTX 3090 (24 GiB), CUDA, Qwen-Image-2.1-Turb
 
 Images should be the full workspace: choose Generate or Edit, add one or more references, inspect thumbnails, remove/reorder them, set a prompt and seed, then generate. Chat should call the same image service after releasing its inference turn, rather than implementing another generator or recursively calling a locked HTTP endpoint. Existing GPU ownership must cover both entry points and all failure/cancellation paths.
 
-The installed runner's `docs/qwen_image_2.1.md` documents repeated `-r` inputs and `--llm_vision`; the implemented path above has now been exercised on this PC. The following original increments retain the intended progression; steps 1–5 are implemented to the extent described above, while portable bundles and chat tools remain open.
+The installed runner's `docs/qwen_image_2.1.md` documents repeated `-r` inputs and `--llm_vision`; the implemented path above has now been exercised on this PC. The following original increments retain the intended progression; steps 1–5 and text-to-image chat tools are implemented to the extent documented. Portable bundles and reference editing in chat remain open.
 
 Recommended increments:
 

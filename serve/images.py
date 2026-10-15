@@ -380,7 +380,7 @@ def _client_gone(svc) -> Exception:
 
 
 @contextlib.contextmanager
-def gpu_turn(svc, gen: ImageGen, job: dict, cancel: threading.Event | None = None):
+def gpu_turn(svc, gen: ImageGen, job: dict, cancel: threading.Event | None = None, on_phase=None):
     """The image job's turn on the GPU: the service's FIFO (and, with parallel requests, the engine's control lines
     once no slot is generating), and the text engine made room for it per the policy.  Yields the policy used."""
     with svc.status_lock:
@@ -412,10 +412,14 @@ def gpu_turn(svc, gen: ImageGen, job: dict, cancel: threading.Event | None = Non
                                       first_token=None, prompt_tokens=None, generated=None, max_tokens=None)
                 restore = None
                 try:
+                    if on_phase is not None:
+                        on_phase("preparing")
                     restore = _make_room(svc, gen, policy, need)
                     yield policy
                 finally:
                     try:
+                        if on_phase is not None:
+                            on_phase("restoring")
                         _give_back(svc, gen, policy, restore)
                     finally:
                         with svc.status_lock:

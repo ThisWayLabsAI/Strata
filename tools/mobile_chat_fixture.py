@@ -11,6 +11,7 @@ import json
 import itertools
 import time
 import sys
+import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -39,7 +40,7 @@ class Fixture(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/health":
             self.json_reply({"status": "ok", "model": "mobile-fixture-no-gpu", "images": True,
-                             "image_generation": True, "loaded": False})
+                             "image_generation": True, "chat_image_generation": True, "loaded": False})
         elif path == "/metrics":
             self.json_reply({"live": {"state": "idle"}})
         elif path == "/mcp":
@@ -84,6 +85,32 @@ class Fixture(SimpleHTTPRequestHandler):
             return
         request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
         content = request.get("messages", [{}])[-1].get("content", "")
+        if request.get("strata_images") and isinstance(content, str) and content.startswith("image"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            call_id, job_id = "fixture-image-call", uuid.uuid4().hex
+            def chunk(**extra):
+                value = {"choices":[{"delta":{},"finish_reason":None}], **extra}
+                self.wfile.write(("data: " + json.dumps(value) + "\n\n").encode()); self.wfile.flush()
+            try:
+                chunk(strata_mcp={"event":"call","id":call_id,"name":"generate_image","server":"Strata","tool":"generate_image","arguments":{"prompt":"a fixture red robot"},"round":1})
+                for sequence, state in enumerate(("queued","preparing","generating","restoring","completed"),1):
+                    if content == "image slow" and state == "generating": time.sleep(2)
+                    event = {"id":call_id,"job_id":job_id,"sequence":sequence,"state":state}
+                    if state == "completed":
+                        if content == "image error": event.update(state="failed",error="Fixture image failure")
+                        else:
+                            event.update(recipe={"schema":"strata.image.v1","prompt":"a fixture red robot","seed":0,"size":"512x512","model":"fixture-image-model","settings":{"steps":8}},
+                                b64_json="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")
+                    chunk(strata_image=event)
+                    if state == "completed": chunk(strata_image=event)  # duplicate delivery must not create a second result
+                if content == "image recovery error": chunk(strata_image={"id":call_id,"job_id":job_id,"sequence":6,"state":"recovery_failed","error":"Image ready; fixture chat reload failed"})
+                chunk(strata_mcp={"event":"result","id":call_id,"ok":content!="image error","text":"Image completed" if content!="image error" else "Image failed","chars":15,"truncated":False,"ms":1})
+                chunk(choices=[{"delta":{"content":"Your image is ready."},"finish_reason":"stop"}])
+                self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
+            except (BrokenPipeError,ConnectionResetError,ConnectionAbortedError): pass
+            return
         if content == "error":
             self.json_reply({"error": {"message": "Fixture error: try again."}}, 500)
             return

@@ -54,6 +54,7 @@
       </div>
       <form class="st-composer" id="composer">
         <div class="attachments" id="attachments" hidden></div>
+        <label class="chat-image-opt-in" id="chat-image-row" hidden><input type="checkbox" id="chat-image-enabled">Create images in chat <span class="muted small">Text prompts only; reference editing is in Images.</span></label>
         <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message"></textarea>
         <div class="st-composer__bar">
           <button type="button" class="st-btn st-btn--icon" id="attach-btn" title="Attach a text file (or drop it here)" aria-label="Attach a file">
@@ -333,6 +334,7 @@
 <div class="scrim" id="scrim" hidden></div>
 <div class="st-toasts" id="toasts" aria-live="polite"></div>
 <script src="web/image-tools.js"></script>
+<script src="web/chat-images.js"></script>
 <script src="web/app.js"></script>
 <script src="web/image-references.js"></script>
 </body>

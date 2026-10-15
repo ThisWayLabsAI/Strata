@@ -4615,7 +4615,7 @@ def _debug_req(api, req, messages, tools, max_new, thinking, prompt_tokens):
 
 # ------------------------------------------------------------------------------------------------ MCP tool loop
 def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new, max_req, sampling, cancel,
-                 mcp_names):
+                 mcp_names, image_hub=None):
     """Service.run with the MCP tools executed here: the model writes a call to an MCP tool, the server runs it, adds
     the call and its result to the conversation and lets the model continue - up to `max_rounds` times.  Yields what
     Service.run yields (text, thinking, the request's own tool calls) plus ("mcp", {...}) for the tool activity, and
@@ -4629,7 +4629,8 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
     messages = list(messages)
     while True:
         text, reasoning, calls, own_calls = [], [], [], 0
-        for kind, x in svc.run(ids, thinking, tools, max_new, sampling, cancel):
+        leg = svc.run(ids, thinking, tools, max_new, sampling, cancel)
+        for kind, x in image_hub.guard_run(leg, cancel) if image_hub else leg:
             if kind == "done":
                 done = x
                 continue
@@ -4670,18 +4671,26 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
 
             def work(c=c, box=box):
                 try:
-                    box["r"] = hub.call(c.name, c.arguments, cancel)
+                    box["r"] = hub.call(c.name, c.arguments, cancel, call_id=c.id) if image_hub else hub.call(c.name, c.arguments, cancel)
                 except McpCancelled:
                     box["cancelled"] = True
             worker = threading.Thread(target=work, daemon=True)
             worker.start()
             try:
                 while worker.is_alive():
-                    worker.join(1.0)
+                    worker.join(0.25 if image_hub else 1.0)
+                    if image_hub:
+                        for image_event in image_hub.drain():
+                            yield "image", image_event
                     if worker.is_alive():
                         yield "ping", None
+                if image_hub:
+                    for image_event in image_hub.drain():
+                        yield "image", image_event
             except GeneratorExit:
                 cancel.set()                             # the client is gone: stop the tool too
+                if image_hub:
+                    worker.join(5)
                 raise
             if "r" not in box:
                 break
@@ -4702,7 +4711,24 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
         except ClientGone:                                      # #1999: the client left while a picture was prepared
             done = {**done, "finish": "cancel"}
             break
+        except Exception as error:
+            if image_hub is None or image_hub.completed_job is None:
+                raise
+            image_hub.recovery_error(error)
+            for image_event in image_hub.drain():
+                yield "image", image_event
+            break
     yield "done", {**done, "completion_tokens": total, "prompt_tokens": len(ids)}
+
+
+def image_chat_chunks(chunks, run, cancel):
+    """Propagate stream closure into the tool generator while its image worker owns the GPU."""
+    try:
+        yield from chunks
+    finally:
+        cancel.set()
+        chunks.close()
+        run.close()
 
 
 # ------------------------------------------------------------------------------------------------ OpenAI
@@ -4760,6 +4786,10 @@ def openai_chunks(svc: Service, req: dict, ids, thinking, tools, max_new, cancel
             c = chunk({})
             c["strata_mcp"] = x
             yield c
+        elif kind == "image":
+            c = chunk({})
+            c["strata_image"] = x
+            yield c
         elif kind == "event":
             ev: Event = x
             if ev.kind == "reasoning" and ev.text:
@@ -4804,12 +4834,14 @@ def _is_json(text: str) -> bool:
 
 
 def openai_collect(chunks) -> dict:
-    content, reasoning, by_index, last, mcp = [], [], {}, None, []
+    content, reasoning, by_index, last, mcp, image_events = [], [], {}, None, [], []
     for c in chunks:
         if c is None:                              # a heartbeat
             continue
         if c.get("strata_mcp"):
             mcp.append(c["strata_mcp"])
+        if c.get("strata_image"):
+            image_events.append(c["strata_image"])
         d = c["choices"][0]["delta"]
         content.append(d.get("content") or "")
         reasoning.append(d.get("reasoning_content") or "")
@@ -4831,6 +4863,8 @@ def openai_collect(chunks) -> dict:
         msg["tool_calls"] = calls
     if mcp:
         msg["strata_mcp"] = mcp
+    if image_events:
+        msg["strata_images"] = image_events
     out = {"id": last["id"], "object": "chat.completion", "created": last["created"], "model": last["model"],
            "choices": [{"index": 0, "message": msg, "finish_reason": last["choices"][0]["finish_reason"]}],
            "usage": last["usage"]}
@@ -5338,6 +5372,7 @@ def make_handler(svc: Service):
                 self._json(200, {"status": "ok", "max_context": svc.reported_ctx(), "model": svc.model,
                                  "images": svc.vision is not None, "api_key": bool(svc.api_key),
                                  "image_generation": svc.images is not None,
+                                 "chat_image_generation": svc.images is not None and not svc.images.missing(),
                                  "loaded": svc.loaded(), "service": "strata"})
             elif path.startswith("/v1/images/files/"):
                 # response_format url: the name (32 random hex digits) is the access, as an OpenAI image URL is
@@ -5816,6 +5851,8 @@ def make_handler(svc: Service):
 
         def _openai(self, req):
             req = svc.with_shared(req, "openai")
+            if "strata_images" in req and not isinstance(req["strata_images"], bool):
+                raise ValueError("strata_images must be true or false")
             bias_api.normalize(req.get("logit_bias"), len(getattr(svc.tok, "tokens", ())) or None)
             messages, tools, kw = openai_to_messages(req)
             self._no_local_images(messages)
@@ -5823,12 +5860,19 @@ def make_handler(svc: Service):
                 tools = None
             force = forced_call(req.get("tool_choice"), tools)      # a bad value is a 400 before anything is sent
             messages, validator = prepare_format(req.get("response_format"), messages)
-            if validator is not None and (tools or req.get("strata_mcp")):
+            if validator is not None and (tools or req.get("strata_mcp") or req.get("strata_images")):
                 raise ValueError("structured response_format with tools/MCP is not supported")
             svc.load()
             max_req = max_new = int(req.get("max_completion_tokens") or req.get("max_tokens") or 0)   # 0/-1: the rest
             bias_api.validate_request(req, svc.engine, len(getattr(svc.tok, "tokens", ())) or None)
             use_mcp = req.get("strata_mcp") is True and svc.mcp is not None      # the web app's opt-in (serve/mcp.py)
+            use_images = req.get("strata_images") is True
+            if use_images and (svc.images is None or svc.images.missing()):
+                raise ValueError("chat image generation is not configured on this server")
+            if use_images and not self._own_page("chat images can be generated"):
+                return
+            if use_images and tool_choice_of(req.get("tool_choice"))[0] == "none":
+                use_mcp = use_images = False
             own = {t.get("name") for t in tools or [] if isinstance(t, dict)}   # #592: a second line of defence
             if use_mcp:
                 if not self._own_page("MCP tools can be used"):   # tools run with the user's rights on this PC
@@ -5837,7 +5881,14 @@ def make_handler(svc: Service):
                 extra = svc.mcp.template_tools(exclude=own)       # the request's own tools win a name clash
                 use_mcp = bool(extra)
                 tools = (tools or []) + extra or None
-            if force and use_mcp:
+            image_hub = None
+            if use_images:
+                from serve.chat_images import ImageToolHub, NAME, TOOL
+                if NAME not in own:                         # client-managed tools always retain ownership
+                    image_hub = ImageToolHub(svc, svc.mcp if use_mcp else None)
+                    tools = (tools or []) + [TOOL]
+                    extra = (extra if use_mcp else []) + [TOOL]
+            if force and (use_mcp or image_hub):
                 raise ValueError("a forced tool_choice with MCP tools is not supported")
             svc.reasoning_budget(req)                         # a bad value is a 400 before anything is sent
             stop_strings(req)                                 # ... and so is a bad stop / stop_sequences
@@ -5846,9 +5897,11 @@ def make_handler(svc: Service):
             self._watch_client(cancel)                       # #430 #431 (#1999: before prepare, which can take long)
             ids, thinking, max_new = svc.prepare(messages, tools, kw, max_new, force=force, req=req, cancel=cancel)
             _debug_req("openai", req, messages, tools, max_new, thinking, len(ids))
-            run = run_with_mcp(svc, svc.mcp, messages, tools, kw, ids, thinking, max_new, max_req, req, cancel,
-                               {t["name"] for t in extra}) if use_mcp else None
+            run = run_with_mcp(svc, image_hub or svc.mcp, messages, tools, kw, ids, thinking, max_new, max_req, req, cancel,
+                               {t["name"] for t in extra}, image_hub=image_hub) if use_mcp or image_hub else None
             chunks = openai_chunks(svc, req, ids, thinking, tools, max_new, cancel, run=run, force=force)
+            if image_hub:
+                chunks = image_chat_chunks(chunks, run, cancel)
             if validator is not None:
                 chunks = structured_chunks(chunks, validator)
             chunks = self._capture(chunks, "openai")

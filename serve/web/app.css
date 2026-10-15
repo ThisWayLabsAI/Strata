@@ -291,3 +291,12 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
 .img-reference-card { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--st-line); border-radius: 8px; overflow-wrap: anywhere; }
 .img-reference-card img { width: 100%; max-height: 180px; object-fit: contain; }
 .img-reference-card .img-template-actions { flex-wrap: wrap; }
+
+.chat-image-opt-in:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 44px; margin: 0 8px 6px; font-size: var(--st-fs-sm); cursor: pointer; }
+.chat-image-opt-in input { width: 18px; height: 18px; accent-color: var(--st-accent); }
+.chat-image { display: grid; gap: 10px; margin: 12px 0; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.chat-image-preview { display: block; width: auto; height: auto; max-width: 100%; max-height: 560px; object-fit: contain; border-radius: var(--st-r-sm); }
+.chat-image-state { font-weight: var(--st-fw-bold); }
+.chat-image-error { color: var(--st-warn-text); }
+.chat-image .img-template-actions { flex-wrap: wrap; }
+.chat-image p { margin: 0; }
