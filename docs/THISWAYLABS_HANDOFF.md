@@ -4,13 +4,13 @@ Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state f
 
 ## User intent and implementation order
 
-Latest increment: `feature/image-metadata-templates`, based on `9172b71f`, implements PNG generation recipes, import/reuse, Discuss in chat and 24 starter templates plus a browser-local saved library. See [IMAGE_RECIPES_AND_REFERENCES.md](IMAGE_RECIPES_AND_REFERENCES.md) for the schema, implemented behavior, verification and reference-editing plan. The user explicitly invited useful additional starters beyond the originally listed genres. Built-ins now also include anime/manga, watercolor, architectural interiors, food/product photography, textures, storyboards, icons, costume/material exploration and vehicle views.
+Latest increment: `feature/reference-image-editing`, based on `374920cb`, adds reference generation/editing in Images using the existing runner and shared GPU queue. It follows the PNG recipes, Discuss in chat, 24 starter templates and saved-library release. See [IMAGE_RECIPES_AND_REFERENCES.md](IMAGE_RECIPES_AND_REFERENCES.md) for the input/API contract, pinned projector, verification, limitations and next steps.
 
-Reference editing in Images as well as chat is recommended, using one shared backend. It remains unimplemented: the installed runner documents reference editing, but the local image model directory has no required vision projector and Strata has no edit/reference endpoint. No weights, machine configs or API keys were changed in this increment.
+Reference editing in Images is implemented and hardware-tested. There are up to three ordered uploads, source/identity/style/composition labels, previews, reorder/remove, browser URL import, result-to-source reuse and cancellation. The pinned official projector is an additional file under the image model's new vision directory. Local config backups are under `C:\AI\Strata-data\backups\reference-editing-20261015`; the intended config change is only `images.llm_vision`. No existing weight, API key, engine build or Python package is replaced. Machine configs remain ignored by Git.
 
 Mobile support is first. Automatically choose the layout using viewport size and primary touch capability, with Automatic / Mobile / Desktop under About > Settings. Save the preference per browser. The user explicitly requested this automatic default, overriding the general opt-in rule for this layout feature.
 
-Next: chat image generation with persistent inline results and safe GPU handoff. Reference-photo editing follows separately. Then implement validated per-conversation model switching. Detailed acceptance criteria remain in [THISWAYLABS_FEATURE_PLANS.md](THISWAYLABS_FEATURE_PLANS.md).
+Next: chat image tools with persistent inline results using the shared generation/editing backend. Release chat's inference turn before acquiring the image FIFO. Then implement validated per-conversation model switching. Portable reference bundles and actual phone keyboard/download checks remain follow-ups. Detailed acceptance criteria remain in [THISWAYLABS_FEATURE_PLANS.md](THISWAYLABS_FEATURE_PLANS.md).
 
 ## Checkouts and branches
 
@@ -60,7 +60,15 @@ Results: 33 browser checks passed at each of 320x568, 390x844, 768x1024, 844x390
 
 This is Chromium coverage, not actual Safari/Android keyboard validation. Real iOS Safari and Android Chrome checks remain open: keyboard open/close, portrait/landscape rotation, browser address bar movement, safe areas, 200% pinch zoom, attachments, tool panels, reading older streaming messages, and both overrides. Record device/browser versions and results. Backend chat/vision/image model smoke tests were deliberately not rerun for a frontend-only change.
 
-## Local rollout and rollback
+## Reference-editing rollout and rollback
+
+Deploy the tested feature by local fast-forward, preserving `374920cb08d1d120f12074346552d342cd6ababc` as `rollback/pre-reference-editing-20261015` in live. This release changes the Python backend: stop live first and restart after source/config deployment. The existing scheduled logon task runs elevated. The ordinary stop launcher can report no server because it cannot read elevated process command lines; run Stop Strata.cmd as administrator, then verify port 8080 health no longer responds. The Codex sandbox cannot access Windows CIM/process ownership, so user assistance may be required for stop/restart. Do not start dev while live remains available.
+
+The additional projector is `C:\AI\Strata-data\models\qwen-image-2.1-turbo\vision\mmproj-Qwen3VL-8B-Instruct-F16.gguf`. Add only `images.llm_vision` to backed-up Original/SC117 live configs and matching ignored dev configs. Preserve all other semantic values and verify this without printing keys. The Original GPU smoke test and cancellation completed; the development server was stopped afterward. SC117 inherits the same image settings but was not hardware-tested for this increment. Development MCP startup hit a sandbox uv-cache access restriction; verify live tools after restart.
+
+Rollback source on the named branch after stopping live, then restart and refresh assets together. Old source ignores the extra projector config key; remove only that key if desired, using local backups as reference. Avoid restoring whole old configs over newer local settings without reviewing differences. Keep the downloaded projector; rollback does not require deleting models. Verify health, chat and existing generation. Check actual live Git/health before assuming rollout has completed; the user-facing handoff snapshot records the final deployment state.
+
+## Earlier frontend rollout and rollback
 
 The user authorized deployment in this chat; the mobile frontend is deployed locally for phone verification after automated checks. Check the actual live commit with `git -C C:\AI\Strata rev-parse HEAD` rather than assuming a remote branch is up to date.
 
@@ -72,6 +80,6 @@ The alignment/New seed rollout preserves `0fdf1c80808a5d6e188dcab32499dce7a81afd
 
 The recipe/template rollout preserves `9172b71ff07084dfcbdc1d87f3c882cda1cddab6` as `rollback/pre-image-recipes-20261015`. It is a frontend-only rollout, including the new `web/image-tools.js` asset; refresh browser assets together after deployment or rollback. PNG recipes are embedded in UI download/preview copies, while raw API/server-file behavior stays unchanged. Saved-template data uses `strata.imageTemplates`; rolling source back does not delete that browser data.
 
-Only source files, fixture/check tools, and docs are part of the mobile commit. The running server reads the HTML/JS/CSS from disk, so this source-only update needs a browser refresh and no engine restart. For rollback, verify tracked edits first, then switch the live source to the named rollback branch; refresh browser assets. Switching frontend source does not delete localStorage. Do not use reset --hard or clean -fdx. Later backend/dependency changes require their own stop/restart/build procedure.
+Only source files, fixture/check tools, and docs were part of the mobile commit. Those earlier frontend-only changes needed a browser refresh and no engine restart. The current reference backend needs the stop/restart procedure above. Switching frontend source does not delete localStorage. Do not use reset --hard or clean -fdx.
 
-Preserve the existing untracked `build-image-cuda.bat`, `enable_strata_tailscale.py`, and `third_party/stable-diffusion.cpp/` in the live checkout. Runtime configs, API keys, model weights, packs, launchers and scheduled tasks stay local and untouched. Do not print config contents or API keys. See `C:\AI\Strata-controls\README.md` and `Strata Fork Workflow.md` for the installation and general workflow.
+Preserve the existing untracked `build-image-cuda.bat`, `enable_strata_tailscale.py`, and `third_party/stable-diffusion.cpp/` in live. Runtime configs stay local; only the backed-up projector property changes for reference editing. API keys, existing weights, packs, launchers and scheduled tasks are preserved. Do not print config contents or API keys. See `C:\AI\Strata-controls\README.md` and `Strata Fork Workflow.md` for the installation and general workflow.

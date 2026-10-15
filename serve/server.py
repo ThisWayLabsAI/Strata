@@ -5406,6 +5406,10 @@ def make_handler(svc: Service):
                         slots = [{"id": 0, "n_ctx": svc.reported_ctx(), "is_processing": busy,
                                   "n_prompt_tokens": in_use}]
                     self._json(200, slots if loaded else [])
+            elif path == "/v1/images/capabilities":
+                if self._authorized():
+                    from serve.image_references import capabilities
+                    self._json(200, capabilities(svc.images.cfg if svc.images is not None else {}))
             elif path == "/v1/status":
                 if self._authorized():
                     self._json(200, svc.v1_status())
@@ -5523,6 +5527,8 @@ def make_handler(svc: Service):
                     self._count_tokens(req)
                 elif path == "/v1/images/generations":
                     self._images(req)
+                elif path == "/v1/images/edits":
+                    self._images(req, edit=True)
                 else:
                     self._json(404, {"error": {"message": "not found"}})
             except EngineNonFinite as e:                    # #879, twice: not the request's fault
@@ -5577,7 +5583,7 @@ def make_handler(svc: Service):
                         record["state"] = "error" if record.get("error") else record.get("outcome", "completed")
                     svc.request_trace.record = None
 
-        def _images(self, req):
+        def _images(self, req, edit=False):
             """POST /v1/images/generations (serve/images.py): one sd-cli job in the GPU's turn."""
             gen = svc.images
             if gen is None:
@@ -5586,6 +5592,10 @@ def make_handler(svc: Service):
                                                       "with --images qwen-image)"}})
                 return
             job = images_api.parse_request(req, gen.cfg)        # ImageRequestError (a ValueError): 400
+            from serve.image_references import parse
+            references = parse(req, gen.cfg, edit=edit)
+            if references:
+                job.update(references=references, operation="edit" if edit else "generate")
             svc.last_request_at = time.time()
             cancel = threading.Event()
             self._watch_client(cancel)
@@ -6771,7 +6781,7 @@ def main() -> int:
     svc.reasoning_close_retry = cfg.get("reasoning_close_retry") is True    # #1053: opt-in, off by default
     if cfg.get("images"):                               # image generation (serve/images.py), set up by setup --images
         icfg = {k: (os.path.abspath(os.path.join(cfg.get("cwd") or ".", v))
-                    if k in ("exe", "diffusion_model", "vae", "llm", "out_dir") and isinstance(v, str)
+                    if k in ("exe", "diffusion_model", "vae", "llm", "llm_vision", "out_dir") and isinstance(v, str)
                     and not os.path.isabs(v) else v)
                 for k, v in cfg["images"].items()}
         try:

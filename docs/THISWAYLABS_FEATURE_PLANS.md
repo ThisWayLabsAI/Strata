@@ -1,6 +1,6 @@
 # Thiswaylabs feature plans
 
-Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat is implemented for local phone verification; see [the current handoff](THISWAYLABS_HANDOFF.md). Chat images and model switching remain planned.
+Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, PNG recipes/templates, and reference editing in Images are implemented; see [the current handoff](THISWAYLABS_HANDOFF.md). Chat image tools and model switching remain planned.
 
 ## Scope and order
 
@@ -8,7 +8,7 @@ Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat is
 2. `feature/chat-images`: generate images directly from chat, show persistent inline results, and hand the GPU back safely. This remains the next major feature after mobile verification.
 3. `feature/model-switcher`: choose an installed chat model per conversation, with matching API behavior and serialized GPU transitions.
 
-Reference-photo editing is a follow-up to chat image generation. Attaching a photo for vision remains a separate existing capability; the first release must not imply it can edit that photo.
+At the user's later request, reference editing moved ahead of chat-tool integration and is now implemented in Images. Attaching a photo to chat remains vision only until chat image tools are implemented. The shared backend now supports reference generation/editing; see [implementation and verification](IMAGE_RECIPES_AND_REFERENCES.md).
 
 The small API Monitor navigation change accompanies these plans on `chore/feature-plans-api-monitor`. It adds a link in the Monitor tab to `/api-monitor`, opening a new tab. The relative origin preserves the development, localhost, and private proxy addresses. The existing Monitor dashboard remains available. The link explains that API monitoring must already be enabled; it does not enable request recording or change configuration.
 

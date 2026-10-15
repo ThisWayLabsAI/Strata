@@ -81,6 +81,20 @@
     <div class="about">
       <form class="st-card img-form" id="img-form">
         <span class="card-title" id="img-title">Make an image</span>
+        <label class="st-field">Operation<select class="st-input" id="img-operation"><option value="generate">Generate</option><option value="edit" disabled>Edit a source image</option></select></label>
+        <details class="st-collapse" id="img-reference-panel">
+          <summary>Reference images (optional)</summary>
+          <div class="st-collapse__body img-template-body">
+            <p class="muted small" id="img-reference-status" role="status">Checking reference support…</p>
+            <fieldset id="img-reference-inputs" disabled>
+              <label class="st-field">Upload images<input class="st-input" type="file" id="img-reference-files" accept="image/png,image/jpeg,image/webp" multiple></label>
+              <label class="st-field">Image URL<input class="st-input" type="url" id="img-reference-url" placeholder="https://…"></label>
+              <button type="button" class="st-btn st-btn--secondary" id="img-reference-add-url">Import URL</button>
+            </fieldset>
+            <div id="img-reference-list" aria-label="Reference images"></div>
+            <p class="muted small">Up to 3 still PNG/JPEG/WebP images, 8 MB each, 20 MB total, 16 megapixels each. In Edit, image 1 is the source. Describe changes and refer to image numbers in your prompt. Roles are labels for your workflow. URL hosts must allow browser access; otherwise download and upload. References stay in memory until you refresh; keep originals to reuse an edit recipe.</p>
+          </div>
+        </details>
         <details class="st-collapse">
           <summary>Starter &amp; saved templates<svg class="st-icon st-icon--sm st-chev"><use href="web/sprite.svg#i-chevron"/></svg></summary>
           <div class="st-collapse__body img-template-body">
@@ -126,6 +140,7 @@
     <div class="img-actions">
       <span class="muted small" id="img-hint" role="status">One image at a time; chat waits while it generates.</span>
       <button type="submit" form="img-form" class="st-btn st-btn--primary" id="img-go">Generate</button>
+      <button type="button" class="st-btn st-btn--secondary" id="img-stop" hidden>Cancel</button>
     </div>
   </section>
 
@@ -312,5 +327,6 @@
 <div class="st-toasts" id="toasts" aria-live="polite"></div>
 <script src="web/image-tools.js"></script>
 <script src="web/app.js"></script>
+<script src="web/image-references.js"></script>
 </body>
 </html>

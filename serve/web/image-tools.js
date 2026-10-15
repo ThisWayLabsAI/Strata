@@ -11,6 +11,13 @@
       throw new Error("Invalid Strata image recipe (prompt, seed or dimensions).");
     }
     const out = {schema: SCHEMA, prompt: value.prompt, seed: value.seed, size: value.size};
+    if (["generate", "edit"].includes(value.operation)) out.operation = value.operation;
+    if (value.references !== undefined) {
+      if (!Array.isArray(value.references) || value.references.length > 3 || value.references.some(ref =>
+        !ref || typeof ref.name !== "string" || ref.name.length > 160 || !["source", "identity", "style", "composition"].includes(ref.role) ||
+        typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(ref.sha256))) throw new Error("Invalid reference provenance in PNG recipe.");
+      out.references = value.references.map(({name, role, sha256}) => ({name, role, sha256}));
+    }
     for (const key of ["model", "createdAt", "originalPrompt", "templateName"]) {
       if (typeof value[key] === "string" && value[key].length <= (key === "originalPrompt" ? 16384 : 256)) out[key] = value[key];
     }

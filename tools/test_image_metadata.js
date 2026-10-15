@@ -84,3 +84,12 @@ test("Genre starters and text-free character/prop/environment sheets are present
   }
   for (const item of api.starters.filter((entry) => entry.group === "Sheets")) assert.match(item.prompt, /No text, letters/);
 });
+
+test("Edit provenance round-trips without embedding references or source URLs", () => {
+  const reference = {name: "source.png", role: "source", sha256: "a".repeat(64)};
+  const out = api.read(api.write(png, {...metadata, operation: "edit", references: [{...reference, data: "private", url: "https://private.invalid"}]}));
+  assert.equal(out.operation, "edit"); assert.deepEqual(out.references, [reference]);
+  for (const references of [[{...reference, sha256: "bad"}], [{...reference, role: "bad"}], Array(4).fill(reference), "bad"]) {
+    assert.throws(() => api.recipe({...metadata, references}), /reference provenance/);
+  }
+});

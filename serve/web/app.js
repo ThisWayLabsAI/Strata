@@ -1248,7 +1248,8 @@ let imageTemplates = Array.isArray(savedImageTemplates) ? savedImageTemplates.fi
   typeof item.prompt === "string" && item.prompt.trim() && item.prompt.length <= 16384 &&
   typeof item.size === "string" && /^\d{1,5}x\d{1,5}$/.test(item.size) &&
   (item.seed === null || (typeof item.seed === "number" && validImageSeed(item.seed))) &&
-  (item.steps === null || (Number.isInteger(item.steps) && item.steps >= 1 && item.steps <= 100))).slice(0, 30) : [];
+  (item.steps === null || (Number.isInteger(item.steps) && item.steps >= 1 && item.steps <= 100)) &&
+  (item.operation === undefined || ["generate", "edit"].includes(item.operation))).slice(0, 30) : [];
 function renderImageTemplates() {
   const select = $("img-template");
   select.replaceChildren(new Option("Choose a template…", ""));
@@ -1270,6 +1271,7 @@ function persistImageTemplates() {
   return false;
 }
 function restoreImageSettings(value) {
+  window.StrataReferences?.template(value);
   $("img-prompt").value = value.prompt;
   if ([...$("img-size").options].some((option) => option.value === value.size)) $("img-size").value = value.size;
   else toast("warn", "Choose a supported size", `The original size was ${value.size}; the current size is kept.`);
@@ -1283,6 +1285,7 @@ function useImageRecipe(value) {
   const metadata = StrataImage.recipe(value);
   restoreImageSettings(metadata);
   imageRecipeInfo(`Loaded prompt, seed and reported settings. Original model: ${metadata.model || "not recorded"}. New images use this server's configured image model.`);
+  window.StrataReferences?.restore(metadata);
   $("img-template").closest("details").open = false;
   showTab("images");
   document.querySelector(".view--images > .about").scrollTop = 0;
@@ -1312,6 +1315,7 @@ $("img-save-template").onclick = () => {
   const existing = imageTemplates.find((item) => item.name === name);
   if (!existing && imageTemplates.length >= 30) { toast("warn", "Template library full", "Delete a saved template before adding another."); return; }
   const item = {id: existing?.id || `local-${crypto.randomUUID()}`, name, prompt, size: $("img-size").value, seed, steps};
+  if ($("img-operation").value === "edit") item.operation = "edit";
   imageTemplates = imageTemplates.filter((entry) => entry.id !== item.id); imageTemplates.unshift(item);
   const persisted = persistImageTemplates(); renderImageTemplates(); activeImageTemplate = name;
   if (persisted) toast("success", "Template saved", name);
@@ -1341,6 +1345,9 @@ function showImageResult(base64, value, annotate = true) {
   const download = document.createElement("a"); download.className = "st-btn st-btn--secondary"; download.href = url;
   download.download = `strata-${metadata.seed}-${Date.now()}.png`; download.textContent = embedded ? "Download PNG + recipe" : "Download original PNG";
   actions.append(download);
+  const reference = document.createElement("button"); reference.type = "button"; reference.className = "st-btn st-btn--secondary";
+  reference.textContent = "Edit this image"; reference.onclick = () => window.StrataReferences?.useResult(imageData);
+  reference.disabled = !window.StrataReferences?.ready(); actions.append(reference);
   for (const [label, handler] of [["Use as template", () => useImageRecipe(metadata)], ["Discuss in chat", () => discussImageRecipe(metadata, url)]]) {
     const button = document.createElement("button"); button.type = "button"; button.className = "st-btn st-btn--secondary";
     button.textContent = label; button.onclick = handler; actions.append(button);
@@ -1371,6 +1378,10 @@ $("img-form").onsubmit = async (ev) => {
   if (!prompt) return;
   if (prompt.length > 16384) { toast("warn", "Prompt too long", "Use at most 16,384 characters for a reusable image recipe."); return; }
   const body = {prompt, size: $("img-size").value, response_format: "b64_json"};
+  const operation = $("img-operation").value;
+  const references = window.StrataReferences?.request() || [];
+  if (references.length) body.references = references;
+  if (operation === "edit" && !references.length) return;
   if ($("img-steps").value !== "") {
     const steps = Number($("img-steps").value);
     if (!Number.isInteger(steps) || steps < 1 || steps > 100) { $("img-steps").reportValidity(); return; }
@@ -1381,16 +1392,18 @@ $("img-form").onsubmit = async (ev) => {
     if (!validImageSeed($("img-seed").value)) { $("img-seed").reportValidity(); return; }
     body.seed = Number($("img-seed").value);
   }
+  const signal = window.StrataReferences?.begin();
   $("img-go").disabled = true;
   $("img-hint").textContent = "Generating\u2026 (a minute or more on a small GPU)";
   try {
-    const r = await fetch("v1/images/generations", {method: "POST", headers: headers(true), body: JSON.stringify(body)});
+    const r = await fetch(operation === "edit" ? "v1/images/edits" : "v1/images/generations", {method: "POST", headers: headers(true), body: JSON.stringify(body), signal});
     const j = await r.json();
     if (!r.ok) throw new Error((j.error && j.error.message) || r.statusText);
     for (const d of j.data) {
       const metadata = {schema: StrataImage.SCHEMA, prompt: d.revised_prompt || prompt, seed: d.seed, size: j.size || body.size,
         createdAt: new Date(Number.isFinite(j.created) ? j.created * 1000 : Date.now()).toISOString(), model: j.model,
-        templateName, settings: {steps: j.strata?.steps ?? body.steps, backend: j.strata?.backend, quant: j.strata?.quant}};
+        templateName, operation: j.operation, references: j.references,
+        settings: {steps: j.strata?.steps ?? body.steps, backend: j.strata?.backend, quant: j.strata?.quant}};
       if (metadata.prompt !== prompt) metadata.originalPrompt = prompt;
       showImageResult(d.b64_json, metadata);
       if (validImageSeed(d.seed)) {
@@ -1403,8 +1416,9 @@ $("img-form").onsubmit = async (ev) => {
     $("img-hint").textContent = "Done. Download PNG + recipe to keep the prompt and seed with the image.";
   } catch (e) {
     $("img-hint").textContent = "";
-    toast("error", "No image", String(e.message || e), 8000);
+    toast(e.name === "AbortError" ? "info" : "error", e.name === "AbortError" ? "Image request cancelled" : "No image", e.name === "AbortError" ? "The server will stop the job and release its GPU turn." : String(e.message || e), 8000);
   } finally {
     $("img-go").disabled = false;
+    window.StrataReferences?.end();
   }
 };

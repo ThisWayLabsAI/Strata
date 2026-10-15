@@ -10,11 +10,13 @@ from __future__ import annotations
 import json
 import itertools
 import time
+import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 IMAGE_SEEDS = itertools.count(1000)
 
 
@@ -44,6 +46,9 @@ class Fixture(SimpleHTTPRequestHandler):
             self.json_reply({"servers": [], "tools": 0})
         elif path == "/settings":
             self.json_reply({})
+        elif path == "/v1/images/capabilities":
+            from serve.image_references import capabilities
+            self.json_reply(capabilities({"llm_vision": __file__}))
         elif path == "/config":
             self.json_reply({}, 404)  # no machine settings in a UI fixture
         elif path == "/":
@@ -55,13 +60,21 @@ class Fixture(SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        if urlsplit(self.path).path == "/v1/images/generations":
+        if urlsplit(self.path).path in ("/v1/images/generations", "/v1/images/edits"):
             request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            from serve.image_references import parse, provenance
+            editing = urlsplit(self.path).path.endswith("/edits")
+            try:
+                references = parse(request, {"llm_vision": __file__}, edit=editing)
+            except ValueError as error:
+                self.json_reply({"error": {"message": str(error)}}, 400)
+                return
             if request.get("prompt") == "error":
                 self.json_reply({"error": {"message": "Fixture image failure"}}, 500)
                 return
             time.sleep(0.02)
             self.json_reply({"size": request.get("size", "1024x1024"), "model": "fixture-image-model", "created": int(time.time()),
+                             **({"operation": "edit" if editing else "generate", "references": provenance(references)} if references else {}),
                              "strata": {"steps": request.get("steps", 8), "backend": "fixture", "quant": "fixture"}, "data": [{
                 "seed": request["seed"] if "seed" in request else next(IMAGE_SEEDS),
                 "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="}]})

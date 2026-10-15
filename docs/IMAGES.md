@@ -6,6 +6,10 @@ Strata's server can also make images: `POST /v1/images/generations`, OpenAI's im
 [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (`sd-cli`), which setup compiles for your GPU.
 It is optional and off unless you ask for it.
 
+The Thiswaylabs fork also supports optional reference generation and editing in Images and the JSON API. See
+[reference editing and recipes](IMAGE_RECIPES_AND_REFERENCES.md) for projector setup, input limits, endpoints,
+GPU handoff, measured smoke tests and remaining chat integration. Existing generation needs no projector.
+
 The model is under the **Qwen Research License**, not Apache 2.0: read
 [its license](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/blob/main/LICENSE) before you use the images
 commercially.

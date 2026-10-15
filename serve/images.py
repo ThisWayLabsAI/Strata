@@ -125,6 +125,10 @@ def sd_cli_args(cfg: dict, job: dict, out_pattern: str) -> list[str]:
     cmd += [str(a) for a in (cfg.get("args") or [])]
     if cfg.get("native") is True:                   # Strata's DiT runner inside sd-cli (CUDA / HIP builds)
         cmd += ["--model-args", "qwen_image_2_1_native=1"]
+    if job.get("reference_paths"):
+        cmd += ["--llm_vision", str(cfg["llm_vision"])]
+        for path in job["reference_paths"]:
+            cmd += ["-r", str(path)]
     return cmd
 
 
@@ -218,9 +222,24 @@ class ImageGen:
         return p if p.is_file() else None
 
     def run(self, job: dict, cancel: threading.Event | None = None) -> tuple[list[bytes], dict]:
+        """Keep all uploaded and generated temporary files inside one cleanup boundary."""
+        with tempfile.TemporaryDirectory(prefix="job-", dir=self.dir) as directory:
+            work = Path(directory)
+            prepared = dict(job)
+            if job.get("references"):
+                prepared["reference_paths"] = []
+                for index, reference in enumerate(job["references"]):
+                    path = work / f"reference-{index}.png"
+                    path.write_bytes(reference["png"])
+                    prepared["reference_paths"].append(str(path))
+            try:
+                return self._run(prepared, work, cancel)
+            finally:
+                self.progress = None
+
+    def _run(self, job: dict, work: Path, cancel: threading.Event | None = None) -> tuple[list[bytes], dict]:
         """Run sd-cli for `job` (parse_request's dict) -> (the PNG files' bytes in order, figures).  The caller holds
         the GPU turn.  ImageJobFailed when sd-cli fails, times out or is cancelled."""
-        work = Path(tempfile.mkdtemp(prefix="job-", dir=self.dir))
         pattern = str(work / "img_%d.png")
         cmd = sd_cli_args(self.cfg, job, pattern)
         timeout = float(self.cfg.get("timeout_s") or 3600)
@@ -262,25 +281,19 @@ class ImageGen:
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.wait(timeout=30)
                 reader.join(timeout=10)
+                proc.stdout.close()
         secs = time.monotonic() - t0
         self.progress = None
         log = logf.read_text(encoding="utf-8", errors="replace")
         outs = [work / f"img_{i}.png" for i in range(job["n"])]
-        try:
-            if why or proc.returncode != 0 or not all(p.is_file() for p in outs):
-                self.totals["failed"] += 1
-                tail = "\n".join(log.strip().splitlines()[-12:])
-                what = why or (f"sd-cli exited with code {proc.returncode}" if proc.returncode
-                               else "sd-cli wrote no image")
-                self._say(f"image job failed: {what}\n{tail}")
-                raise ImageJobFailed(f"{what}; the end of its log:\n{tail}")
-            images = [p.read_bytes() for p in outs]
-        finally:
-            for p in work.iterdir():
-                with contextlib.suppress(OSError):
-                    p.unlink()
-            with contextlib.suppress(OSError):
-                work.rmdir()
+        if why or proc.returncode != 0 or not all(p.is_file() for p in outs):
+            self.totals["failed"] += 1
+            tail = "\n".join(log.strip().splitlines()[-12:])
+            what = why or (f"sd-cli exited with code {proc.returncode}" if proc.returncode
+                           else "sd-cli wrote no image")
+            self._say(f"image job failed: {what}\n{tail}")
+            raise ImageJobFailed(f"{what}; the end of its log:\n{tail}")
+        images = [p.read_bytes() for p in outs]
         figures = {"seconds": round(secs, 2), "steps": job["steps"], "n": job["n"],
                    "size": f"{job['width']}x{job['height']}", "seed": job["seed"],
                    "backend": self.cfg.get("backend"), "quant": self.cfg.get("quant")}
@@ -312,8 +325,12 @@ class ImageGen:
             else:
                 item["b64_json"] = base64.b64encode(png).decode("ascii")
             data.append(item)
-        return {"created": int(time.time()), "data": data, "model": self.model,
-                "output_format": "png", "size": f"{job['width']}x{job['height']}", "strata": figures}
+        response = {"created": int(time.time()), "data": data, "model": self.model,
+                    "output_format": "png", "size": f"{job['width']}x{job['height']}", "strata": figures}
+        if job.get("references"):
+            from serve.image_references import provenance
+            response.update(operation=job.get("operation", "generate"), references=provenance(job["references"]))
+        return response
 
     def status(self) -> dict:
         out = {"enabled": True, "model": self.model, "backend": self.cfg.get("backend"),
@@ -386,18 +403,24 @@ def gpu_turn(svc, gen: ImageGen, job: dict, cancel: threading.Event | None = Non
                             raise _client_gone(svc)
                         time.sleep(0.25)
                 need = need_mib(gen.cfg, job["width"], job["height"])
+                if job.get("references"):
+                    # Reserve the projector plus encoding buffers; no-reference planning is unchanged.
+                    need += (Path(gen.cfg["llm_vision"]).stat().st_size >> 20) + 1024 * len(job["references"])
                 policy = resolve_policy(svc, gen, need)
                 with svc.status_lock:
                     svc.status.update(busy=True, phase="generating an image", started=time.time(),
                                       first_token=None, prompt_tokens=None, generated=None, max_tokens=None)
-                restore = _make_room(svc, gen, policy, need)
+                restore = None
                 try:
+                    restore = _make_room(svc, gen, policy, need)
                     yield policy
                 finally:
-                    _give_back(svc, gen, policy, restore)
-                    with svc.status_lock:
-                        svc.status["busy"] = False
-                    svc.last_request_at = time.time()
+                    try:
+                        _give_back(svc, gen, policy, restore)
+                    finally:
+                        with svc.status_lock:
+                            svc.status["busy"] = False
+                        svc.last_request_at = time.time()
             finally:
                 if ctl is not None:
                     ctl.release()
