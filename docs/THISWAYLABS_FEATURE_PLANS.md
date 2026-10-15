@@ -2,6 +2,8 @@
 
 Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, PNG recipes/templates, reference editing in Images, and opt-in text-to-image chat tools are implemented; see [the current handoff](THISWAYLABS_HANDOFF.md) and [chat image contract and verification](CHAT_IMAGES.md). Chat reference editing and model switching remain planned.
 
+The user confirmed that enabled chat generation worked and accepted moving on while continuing testing. The text-to-image increment is accepted within its documented limits. [Implementation decisions](THISWAYLABS_DECISIONS.md) record the boundaries and release evidence. Existing acceptance lists below retain the original goals; actual coverage and outstanding device/backend checks are recorded in the handoff, not implied by acceptance of the increment.
+
 ## Scope and order
 
 1. `fix/mobile-chat`: keep the composer usable with a phone keyboard and make streaming and image scrolling predictable. Moved first at the user's request.
@@ -51,9 +53,25 @@ Before release, record the exact commit, checks, device/browser versions, hardwa
 - Malformed tool arguments, excessive sizes/counts, unauthorized asset access, path traversal, repeated events, and mixed client-owned/MCP calls have explicit tests. No credentials appear in links, saved result metadata, or exported chats.
 - Existing image/API and MCP tests pass with the feature disabled. Run `python -m unittest serve.test_images serve.test_mcp serve.test_monitor`, plus focused new orchestration/storage tests. Hardware smoke tests are required before release, not during documentation work.
 
-### Follow-up: reference-photo editing
+### Next increment: reference-aware generation and editing in chat
 
-Plan separately after generation is accepted: verify installed backend support and extra vision weights, define reference-image upload limits and retention, expose a distinct edit tool, and validate identity/content preservation on user-provided examples. Do not download weights, change encoders, or claim editing support in the first increment.
+Text-to-image generation is accepted; the installed Images backend already supports up to three ordered references and editing with its verified projector. Reuse those assets and contracts. Work on `feature/chat-image-editing` from current stable, using mocks/fixtures before coordinated hardware tests. This section is a plan, not deployed chat behavior.
+
+1. Make Generate/Edit and selected references explicit. An attachment for analysis must not silently become an edit source. Allow a current attachment or a chosen generated result to become a reference, with visible source/identity/style/composition roles and order. Resolve references only from the request's authorized inputs; preserve source provenance without accepting model-supplied paths or fetching arbitrary model-supplied URLs.
+2. Add a distinct edit tool beside text generation. Validate a bounded selection of reference IDs using the existing reference normalization, count, size, role and capability checks. A missing/stale reference or unavailable edit capability is an actionable error, never a silent text-to-image fallback. Tool descriptions must distinguish new images, referenced generation, edits and analysis.
+3. Reuse the existing GPU turn, one-attempt budget, typed states, cancellation, recovery handling, inline cards and IndexedDB output storage. Keep reference pixels out of textual tool summaries. Retain operation, ordered reference hashes/roles and actual seed/settings in result recipes. A recipe alone cannot reconstruct original reference pixels.
+4. Preserve the current mode and references when applying templates. Mode/reference guidance must agree with the actual request. Editing a generated chat image requires explicit source selection; do not guess which older image the user means. Make unavailable inputs after refresh visible and require reattachment unless that input is explicitly persisted by the implementation.
+
+Acceptance criteria:
+
+- With chat image tools disabled, ordinary vision/chat and client-owned tools remain unchanged. An analysis request never edits. Enabled Generate with references and Edit use the selected source bytes and roles, rather than merely describing them in a text prompt.
+- Edit requires at least one valid selected source; no missing-reference fallback generates an unrelated image. Malformed, foreign, stale or excessive reference IDs are rejected before GPU work. Credentials, local paths and source URLs do not enter recipes or exports.
+- Selecting an inline generated image as a source and revising it produces a new result without mutating or losing the original. Recipes/downloads record operation, seed and ordered reference provenance. Applying a template preserves the user's selected mode/references.
+- Completed outputs survive refresh; unavailable input references are clearly identified and are never silently replaced. Duplicate events, Stop/disconnect, storage failure and chat recovery errors retain the guarantees of the accepted text-only path.
+- Mock/fixture tests cover routing, reference authorization, missing inputs, mode/template preservation, persistence and cancellation. Existing text-only chat, Images reference/API, MCP and mobile regressions pass.
+- After stopping live through existing controls, hardware-test chat → referenced generation/edit → chat with Original and SC117, using deliberately distinguishable references. Record output inspection, seed, policy and recovery results; do not promise perfect identity preservation from a smoke test. Restore live afterward without changing configs, models or packages.
+
+Portable reference bundles, cross-device image history and HTTP resume are separate follow-ups. Model switching follows this chat-edit increment.
 
 ## 2. Mobile chat
 

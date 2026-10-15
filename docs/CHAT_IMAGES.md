@@ -2,6 +2,8 @@
 
 Thiswaylabs fork, 2026-10-15. Chat can generate one image from text per request using the same image backend as Images. Reference editing stays in Images for this increment; attaching a photo to chat remains vision input, not an image-edit reference.
 
+Deployment: application commit `996c3cbf503817d9943614555cff61e1def7fb79` is live locally. The user confirmed generation with the checkbox enabled and accepted moving on while continuing testing. See [implementation decisions and follow-ups](THISWAYLABS_DECISIONS.md).
+
 ## Use it
 
 When the configured image runner and its model files exist, the composer offers **Create images in chat**. It is off by default and remembered in this browser. Enable it and explicitly ask for an image, for example: “Create a 512x512 studio photograph of a small red toy robot. No lettering.” Ordinary questions still produce text; the model decides whether the explicit image tool is appropriate. Requests to write a prompt or analyze an image should not invoke it.
@@ -64,3 +66,5 @@ The 82 Python image/chat/reference/monitor/MCP tests and 16 Node recipe/template
 Run the backend suite with `python -m unittest serve.test_chat_images serve.test_images serve.test_image_references serve.test_mcp serve.test_monitor`. Use `tools/mobile_chat_fixture.py` on isolated port 8091 for browser checks; run `tools/chat_image_ui_checks.js`, reload, then `tools/chat_image_reload_checks.js`. These replace fixture history and must not run against live. A native SC117 browser run at 390x844 generated seed 609 and restored its 454205-byte PNG from IndexedDB after refresh. Browser automation checked PNG contents; actual device download dialogs remain manual verification.
 
 On the local RTX 3090 (24 GiB), CUDA image runner, Qwen-Image-2.1-Turbo Q8_0, 8 steps, both Original IQ2_XS and SC117 IQ2_XS called the image tool for a 512x512 robot with seed 606. Both used unload policy, saved their own conversation, generated the PNG, restored the session and continued with a confirmation. End-to-end chat/image/chat took 32.25 s for Original and 31.75 s for SC117 in these short runs. Both subsequently answered 17×23 = 391 and recovered to READY after cancellation of a separate image request. These are smoke tests, not throughput, reasoning or broad image-quality benchmarks. Other GPUs/backends and actual iOS/Android remain untested.
+
+After restart, live Original Qwen passed capability/asset/auth checks, ordinary chat without opt-in, and a 512x512 chat image with seed 610. It continued with a completion message and answered 17×23 = 391 on the next request. The image used the configured unload policy and 8 CUDA steps; no job remained in flight. The web MCP server still reported three tools. The user subsequently confirmed the enabled chat flow worked; further exploratory testing continues.
