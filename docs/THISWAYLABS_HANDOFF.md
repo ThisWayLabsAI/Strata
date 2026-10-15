@@ -2,6 +2,14 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Current follow-up: brush, reference recipes and progress
+
+`feature/edit-brush-reference-recipes`, based on `bed775c2d371b78a8ee420f6d66ea099cb8221ee`, adds default Brush selection with adjustable size, eraser and five-stroke undo; Box remains available. Brush sends a separate black-and-white mask through the existing reference API while preserving the source bytes. This remains model guidance, not exact outside-mask pixel protection. Reference PNG cards now detect embedded recipes and expose Load recipe without another file picker. This path preserves all current references and the selected operation; the standalone PNG import retains its original clear/restore behavior. Neither upload nor recipe loading submits generation. The lighting dropdown and Reset presets align; an indeterminate progress bar appears while an Images request is pending and clears in all outcomes. See [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md) for the contract and limits.
+
+Verification: 23 Node tests and 777 Chromium checks across five viewports passed. The new checks inspect real mask pixels, undo/erase/cancel, reference recipe reuse and mode/order preservation, alignment and progress cleanup after success/failure/cancellation. A native brush gesture and mobile layout were inspected. Live Original's existing image API accepted the brush mask and replaced a robot head with a green sphere (seed 720, 512x512, 8 steps, 10.89 s, keep policy). Chat returned READY afterward; no request remained in flight. No backend, model, config, package, key or control changes. Actual phones remain untested.
+
+Preserve rollback source `bed775c2d371b78a8ee420f6d66ea099cb8221ee` as `rollback/pre-brush-reference-recipes-20261015`. Deploy web assets together and refresh; do not restart the live service for this frontend-only follow-up. The user is continuing exploratory editing tests. Record final local deployment in the user-facing snapshot; GitHub publication remains pending authentication. Next remains explicit reference editing in chat, then model switching.
+
 ## Current increment: visual editing controls in Images
 
 `feature/image-edit-controls`, based on stable `008a0f10c98f1c82b71e6984bcba3cc4d77ff07b`, adds optional camera angle, framing/zoom and lighting presets, a final prompt preview, and mouse/touch/keyboard rectangular region marking on source image 1. The draft and original reference bytes are preserved. A separate marked copy uses one reference slot; this is model guidance, not a hard mask or guarantee of unchanged surrounding pixels. No new backend/config/model/dependency is required. [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md) records usage, recipe fields, tested limits and results.

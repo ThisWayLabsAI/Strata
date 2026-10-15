@@ -4,6 +4,8 @@ Updated 2026-10-15. This records implemented recipes, context-aware templates an
 
 Images also offers optional camera, framing/zoom and lighting presets plus rectangular region guidance in Edit. The original source stays intact; a separately marked copy uses a reference slot. See [IMAGE_EDIT_CONTROLS.md](IMAGE_EDIT_CONTROLS.md) for use, optional `editing`/`controlPrompt` recipe fields, tests and limits. This is annotation guidance rather than exact pixel masking. Templates preserve these selected controls; PNG recipe import restores presets but requires sources and region selection again.
 
+The follow-up defaults to Brush, with size, erase and undo; Box is still selectable. Freehand edits use a separate monochrome mask reference. Reference PNG cards now offer Load recipe when metadata is present, preserving all current references and the current operation. The standalone Load recipe from PNG picker still restores the recorded operation and clears references. Uploading never automatically changes the draft or starts generation. Recipe errors do not prevent using a valid image as a reference.
+
 ## Implemented in Images
 
 New UI-generated previews and PNG downloads carry an uncompressed UTF-8 PNG `iTXt` chunk named `strata.image`. Its JSON schema is `strata.image.v1`. It stores the actual returned prompt and seed, output dimensions, generation date, returned image model ID, reported steps/backend/quantization and the starting template name. A differing original submitted prompt is retained separately. Unknown/private fields are excluded. No API keys or machine paths are added.

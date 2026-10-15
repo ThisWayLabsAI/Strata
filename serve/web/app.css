@@ -209,7 +209,8 @@ main { flex: 1; min-height: 0; display: flex; }
 .img-results figcaption, #img-recipe-info { overflow-wrap: anywhere; }
 .img-actions { flex: none; width: 100%; max-width: 860px; margin: 0 auto; padding: 12px 24px; display: flex;
   align-items: center; gap: 12px; background: var(--st-surface); border-top: 1px solid var(--st-line); }
-.img-actions #img-hint { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.img-actions .img-job-status { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#img-progress { display: block; width: 100%; height: 7px; margin-top: 6px; accent-color: var(--st-accent); }
 .img-actions #img-go { flex: none; min-height: 44px; }
 html[data-mobile-chat="true"] .view--images > .about { padding: 12px max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px)); }
 html[data-mobile-chat="true"] .img-actions { padding: 8px max(12px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
@@ -302,6 +303,8 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
 .chat-image p { margin: 0; }
 .img-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .img-preset-grid .st-input { min-height: 44px; }
+#img-preset-reset { align-self: end; height: 44px; min-height: 44px; padding-block: 0; }
+#img-brush-size { width: 100%; min-height: 44px; }
 .img-region-toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .img-region-toggle input { width: 18px; height: 18px; }
 #img-region-canvas { display: block; width: 100%; max-width: 720px; height: auto; touch-action: none; cursor: crosshair; border: 2px solid var(--st-line); border-radius: 6px; margin-block: 12px; }

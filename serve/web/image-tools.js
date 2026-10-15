@@ -20,6 +20,10 @@
       if (!Array.isArray(r) || r.length !== 4 || r.some(n => typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1) ||
           r[2] < .01 || r[3] < .01 || r[0] + r[2] > 1.000001 || r[1] + r[3] > 1.000001) throw new Error("Invalid normalized edit region.");
       out.region = r.map(n => Math.round(n * 100000) / 100000);
+      if (value.regionMode !== undefined) {
+        if (!["brush", "box"].includes(value.regionMode)) throw new Error("Invalid region selection tool.");
+        out.regionMode = value.regionMode;
+      }
     }
     return out;
   }

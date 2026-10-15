@@ -7,6 +7,7 @@
   const mode=value=>change("img-operation",value), controls=StrataImageEditing;
   await until(()=>StrataReferences.ready()); showTab("images"); $("img-edit-controls").open=true;
   StrataReferences.restore({operation:"generate"}); controls.restore({});
+  $("img-region-tool").value="box";$("img-region-tool").dispatchEvent(new Event("change"));
   $("img-prompt").value="Replace the red square with a green sphere.";
   check(controls.prepare("unchanged",[],"generate").prompt==="unchanged","Opt-in controls preserve the default request prompt");
   check($("img-region-controls").disabled,"Generate does not expose an active edit-region selector");

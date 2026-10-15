@@ -32,3 +32,11 @@ test("Recipe keeps whitelisted controls and draft without private fields", () =>
 test("Malformed presets and regions cannot enter a reusable recipe", () => {
   for (const value of [{camera:"arbitrary"},{lighting:"private"},{region:[0,0,0,.1]},{region:[.9,0,.5,.2]},{region:[0,0,NaN,.5]},{region:"bad"}]) assert.throws(()=>StrataImage.editingSettings(value),/Invalid/);
 });
+test("Brush recipe identifies actual mask pixels and remains backwards compatible with box recipes", () => {
+  const config={region:[.1,.2,.4,.5],regionMode:"brush"};
+  assert.match(api.compose("replace",config,"edit",1),/White painted pixels/);
+  assert.doesNotMatch(api.compose("replace",config,"edit",1),/red box at/);
+  assert.equal(StrataImage.editingSettings(config).regionMode,"brush");
+  assert.throws(()=>StrataImage.editingSettings({...config,regionMode:"unknown"}),/Invalid region/);
+  assert.match(api.compose("replace",{region:config.region},"edit",1),/red box at/);
+});

@@ -1318,13 +1318,14 @@ function restoreImageSettings(value) {
   activeImageTemplate = value.templateName || value.name || "";
   updateImageSeedMode();
 }
-function useImageRecipe(value) {
+function useImageRecipe(value, {keepReferences = false} = {}) {
   const metadata = StrataImage.recipe(value);
   appliedImageTemplateContext = null;
   restoreImageSettings({...metadata, prompt: metadata.editing && metadata.controlPrompt !== undefined ? metadata.controlPrompt : metadata.prompt});
   imageRecipeInfo(`Loaded prompt, seed and reported settings. Original model: ${metadata.model || "not recorded"}. New images use this server's configured image model.`);
-  window.StrataReferences?.restore(metadata);
+  if (!keepReferences) window.StrataReferences?.restore(metadata);
   window.StrataImageEditing?.restore(metadata);
+  if (keepReferences) imageRecipeInfo(`Loaded prompt, seed and reported settings from a reference PNG. Current operation and all references kept. Original model: ${metadata.model || "not recorded"}. Review the prompt before submitting.`);
   $("img-template").closest("details").open = false;
   showTab("images");
   document.querySelector(".view--images > .about").scrollTop = 0;
@@ -1455,6 +1456,8 @@ $("img-form").onsubmit = async (ev) => {
   const signal = window.StrataReferences?.begin();
   $("img-go").disabled = true;
   $("img-hint").textContent = "Generating\u2026 (a minute or more on a small GPU)";
+  $("img-progress").hidden = false;
+  $("img-progress").setAttribute("aria-busy", "true");
   try {
     const r = await fetch(operation === "edit" ? "v1/images/edits" : "v1/images/generations", {method: "POST", headers: headers(true), body: JSON.stringify(body), signal});
     const j = await r.json();
@@ -1480,6 +1483,8 @@ $("img-form").onsubmit = async (ev) => {
     $("img-hint").textContent = "";
     toast(e.name === "AbortError" ? "info" : "error", e.name === "AbortError" ? "Image request cancelled" : "No image", e.name === "AbortError" ? "The server will stop the job and release its GPU turn." : String(e.message || e), 8000);
   } finally {
+    $("img-progress").hidden = true;
+    $("img-progress").removeAttribute("aria-busy");
     $("img-go").disabled = false;
     window.StrataReferences?.end();
   }

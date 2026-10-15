@@ -26,7 +26,15 @@
         const button = document.createElement("button"); button.type = "button"; button.className = "st-btn st-btn--secondary";
         button.textContent = text; button.disabled = running || reading || disabled; button.onclick = action; actions.append(button);
       }
-      card.append(preview, label, role, actions); list.append(card);
+      if (ref.recipe) {
+        const recipeButton = document.createElement("button"); recipeButton.type = "button"; recipeButton.className = "st-btn st-btn--secondary";
+        recipeButton.textContent = "Load recipe"; recipeButton.disabled = running || reading;
+        recipeButton.onclick = () => { if (!running && !reading) useImageRecipe(ref.recipe, {keepReferences:true}); };
+        actions.append(recipeButton);
+      }
+      const recipeStatus = document.createElement("span"); recipeStatus.className = "muted small";
+      recipeStatus.textContent = ref.recipe ? "Strata recipe found — load it without selecting the file again." : ref.recipeError || "No Strata recipe found in this image.";
+      card.append(preview, label, role, actions, recipeStatus); list.append(card);
     });
     $("img-reference-inputs").disabled = !ready || reading || running;
     $("img-reference-upload").disabled = !ready || reading || running;
@@ -46,7 +54,12 @@
     });
     const image = new Image(); image.src = data; await image.decode();
     if (image.naturalWidth * image.naturalHeight > 16_000_000) throw new Error("Use an image of at most 16 megapixels.");
-    refs.push({data, name: (file.name || "reference").slice(0, 160).replace(/[\x00-\x1f]/g, ""), role: refs.length ? "identity" : "source", size: file.size});
+    let recipe, recipeError;
+    if (file.type === "image/png") {
+      try { recipe = StrataImage.read(new Uint8Array(await file.arrayBuffer())); }
+      catch (_) { recipeError = "Recipe could not be read. The image can still be used as a reference."; }
+    }
+    refs.push({data, name: (file.name || "reference").slice(0, 160).replace(/[\x00-\x1f]/g, ""), role: refs.length ? "identity" : "source", size: file.size, recipe, recipeError});
   }
   async function importing(action) {
     if (reading || running) return;

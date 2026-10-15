@@ -137,9 +137,14 @@
             <fieldset id="img-region-controls" disabled>
               <label class="img-region-toggle"><input type="checkbox" id="img-region-enabled"> Mark an edit region on source image 1</label>
               <div id="img-region-editor" hidden>
-                <p class="muted small" id="img-region-help">Drag a box with mouse or touch. Keyboard: Enter selects the center; arrows move, Shift + arrows resize. Describe the replacement in Prompt. The original stays intact; a marked guide uses one of the three reference slots. This guides the model, not exact pixel protection.</p>
+                <div class="img-options">
+                  <label class="st-field">Selection tool<select class="st-input" id="img-region-tool"><option value="brush">Brush</option><option value="box">Box</option></select></label>
+                  <label class="st-field">Brush size <output id="img-brush-size-label">8%</output><input id="img-brush-size" type="range" min="2" max="30" value="8" aria-label="Brush size percent of image short edge"></label>
+                </div>
+                <label class="img-region-toggle"><input type="checkbox" id="img-brush-erase"> Erase brush marks</label>
+                <p class="muted small" id="img-region-help">Paint the area with mouse or touch; adjust brush size or erase to refine it. Undo keeps the last five strokes. Box remains available. Keyboard: Select center works with either tool; arrows move/resize only a box. Describe the change in Prompt. The original stays intact; the guide uses one reference slot. This guides the model, not exact pixel protection.</p>
                 <canvas id="img-region-canvas" width="512" height="512" tabindex="0" role="img" aria-label="Source image region selector" aria-describedby="img-region-help"></canvas>
-                <div class="img-template-actions"><button type="button" class="st-btn st-btn--secondary" id="img-region-center">Select center</button><button type="button" class="st-btn st-btn--secondary" id="img-region-clear">Clear region</button></div>
+                <div class="img-template-actions"><button type="button" class="st-btn st-btn--secondary" id="img-region-center">Select center</button><button type="button" class="st-btn st-btn--secondary" id="img-region-undo" disabled>Undo stroke</button><button type="button" class="st-btn st-btn--secondary" id="img-region-clear">Clear region</button></div>
               </div>
             </fieldset>
             <p class="muted small" id="img-region-status" role="status">Select Edit and upload a source to mark a region.</p>
@@ -168,7 +173,7 @@
       <div class="img-results" id="img-results"></div>
     </div>
     <div class="img-actions">
-      <span class="muted small" id="img-hint" role="status">One image at a time; chat waits while it generates.</span>
+      <div class="img-job-status"><span class="muted small" id="img-hint" role="status">One image at a time; chat waits while it generates.</span><progress id="img-progress" aria-label="Image generation in progress" hidden></progress></div>
       <button type="submit" form="img-form" class="st-btn st-btn--primary" id="img-go">Generate</button>
       <button type="button" class="st-btn st-btn--secondary" id="img-stop" hidden>Cancel</button>
     </div>
