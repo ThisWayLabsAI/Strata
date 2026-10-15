@@ -1435,12 +1435,12 @@ $("img-form").onsubmit = async (ev) => {
   let references = window.StrataReferences?.request() || [];
   const controlPrompt = prompt;
   const templatePrompt = imageTemplateBase(prompt);
-  let editing;
+  let editing, finalizeImage, requestSize;
   try {
     const prepared = window.StrataImageEditing?.prepare(prompt, references, operation);
-    if (prepared) { prompt = prepared.prompt; references = prepared.references; editing = prepared.editing; }
+    if (prepared) { prompt = prepared.prompt; references = prepared.references; editing = prepared.editing; finalizeImage = prepared.finalize; requestSize = prepared.requestSize; }
   } catch (error) { toast("warn", "Check image controls", error.message, 8000); return; }
-  const body = {prompt, size: $("img-size").value, response_format: "b64_json"};
+  const body = {prompt, size: requestSize || $("img-size").value, response_format: "b64_json"};
   if (references.length) body.references = references;
   if (operation === "edit" && !references.length) return;
   if ($("img-steps").value !== "") {
@@ -1463,16 +1463,21 @@ $("img-form").onsubmit = async (ev) => {
     const j = await r.json();
     if (!r.ok) throw new Error((j.error && j.error.message) || r.statusText);
     for (const d of j.data) {
-      const metadata = {schema: StrataImage.SCHEMA, prompt: d.revised_prompt || prompt, seed: d.seed, size: j.size || body.size,
+      let imageData=d.b64_json,outputSize=j.size || body.size;
+      if(finalizeImage) {
+        $("img-hint").textContent="Applying the selected edit while preserving the original…";
+        const local=await finalizeImage(imageData);imageData=local.base64;outputSize=local.size;
+      }
+      const metadata = {schema: StrataImage.SCHEMA, prompt: d.revised_prompt || prompt, seed: d.seed, size: outputSize,
         createdAt: new Date(Number.isFinite(j.created) ? j.created * 1000 : Date.now()).toISOString(), model: j.model,
         templateName, operation: j.operation, references: j.references, editing,
         settings: {steps: j.strata?.steps ?? body.steps, backend: j.strata?.backend, quant: j.strata?.quant}};
       if (metadata.prompt !== prompt) metadata.originalPrompt = prompt;
       if (editing) metadata.controlPrompt = controlPrompt;
       if (templatePrompt !== prompt) metadata.templatePrompt = templatePrompt;
-      showImageResult(d.b64_json, metadata);
+      showImageResult(imageData, metadata);
       if (validImageSeed(d.seed)) {
-        recentImageSeeds.unshift({seed: Number(d.seed), size: j.size || body.size, time: Date.now()});
+        recentImageSeeds.unshift({seed: Number(d.seed), size: outputSize, time: Date.now()});
         recentImageSeeds = recentImageSeeds.slice(0, 10);
       }
     }

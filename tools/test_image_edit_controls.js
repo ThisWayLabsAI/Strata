@@ -40,3 +40,38 @@ test("Brush recipe identifies actual mask pixels and remains backwards compatibl
   assert.throws(()=>StrataImage.editingSettings({...config,regionMode:"unknown"}),/Invalid region/);
   assert.match(api.compose("replace",{region:config.region},"edit",1),/red box at/);
 });
+test("Protected edit blending leaves every zero-mask pixel byte-identical",()=>{
+  const source=new Uint8ClampedArray([10,20,30,255,40,50,60,255,70,80,90,255]);
+  const edited=new Uint8ClampedArray([255,0,0,255,0,255,0,255,0,0,255,255]);
+  const mask=new Uint8ClampedArray([0,0,0,0,0,0,0,255,0,0,0,128]);
+  api.blendSelection(source,edited,mask);
+  assert.deepEqual([...source.slice(0,4)],[10,20,30,255]);assert.deepEqual([...source.slice(4,8)],[0,255,0,255]);
+  assert.ok(source[10]>90 && source[10]<255);assert.throws(()=>api.blendSelection(source,new Uint8Array(1),mask),/Mismatched/);
+});
+test("Small edits get an in-bounds crop containing the selection; large edits stay full-frame",()=>{
+  for(const r of [[.26,.35,.1,.08],[0,0,.02,.02],[.96,.96,.04,.04]]){
+    const c=api.focusCrop(r,1024,1024);assert.ok(c && c.width===c.height && c.width<1024);
+    assert.ok(c.x<=r[0]*1024 && c.y<=r[1]*1024 && c.x+c.width>=(r[0]+r[2])*1024 && c.y+c.height>=(r[1]+r[3])*1024);
+  }
+  assert.equal(api.focusCrop([.1,.1,.7,.7],1024,1024),null);
+});
+test("Local compositing and crop provenance survive the recipe whitelist",()=>{
+  const value={region:[.2,.2,.1,.1],regionMode:"brush",preserveOutside:true,crop:[.1,.1,.3,.3],sourceSize:"1024x1024"};
+  assert.deepEqual(StrataImage.editingSettings(value),value);
+  assert.equal(StrataImage.editingSettings({...value,preserveOutside:false}).preserveOutside,false);
+  assert.throws(()=>StrataImage.editingSettings({...value,crop:[.9,.1,.3,.3]}),/crop/);
+});
+test("Only explicit fur/hair color requests get an inferred black/white source-color instruction",()=>{
+  assert.match(api.colorEdit("Change the selected area to white fur.","BLACK",1),/Replace the BLACK fur.*clean WHITE fur/);
+  assert.match(api.colorEdit("Turn the painted region into blue hair","WHITE",2),/Image 3 is a selection mask/);
+  for(const text of ["Remove the white fur.","Keep the selected area white.","Change the selected area to white fur, but preserve the black stripe."])
+    assert.equal(api.colorEdit(text,"BLACK",1),null);
+  assert.equal(api.colorEdit("Change the selected area to white fur.",null,1),null);
+});
+test("Camera direction and elevation combine independently without conflicting eye-level defaults",()=>{
+  for(const camera of ["front","rear","side"]) {
+    const text=api.compose("same scene",{camera,elevation:"low"},"edit",1);
+    assert.match(text,/below eye level/);assert.doesNotMatch(text,/at eye level|looking horizontally/);
+  }
+  assert.match(api.compose("same scene",{camera:"overhead"},"edit",1),/directly above/);
+});

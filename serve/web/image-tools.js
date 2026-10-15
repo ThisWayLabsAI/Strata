@@ -7,7 +7,7 @@
   const seedOK = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
   function editingSettings(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid editing controls.");
-    const choices = {camera:["front","three-quarter","side","rear","high","low","overhead"], framing:["close","medium","wide","full"],
+    const choices = {camera:["front","three-quarter","side","rear","high","low","overhead"], elevation:["eye","high","low","overhead"],framing:["close","medium","wide","full"],
       lighting:["soft","overcast","golden","side","rim","high-key","low-key","neon"]};
     const out = {};
     for (const key of Object.keys(choices)) {
@@ -23,6 +23,13 @@
       if (value.regionMode !== undefined) {
         if (!["brush", "box"].includes(value.regionMode)) throw new Error("Invalid region selection tool.");
         out.regionMode = value.regionMode;
+      }
+      if (typeof value.preserveOutside === "boolean") out.preserveOutside = value.preserveOutside;
+      if(value.crop !== undefined) {
+        const c=value.crop;
+        if(!Array.isArray(c) || c.length!==4 || c.some(n=>!Number.isFinite(n)||n<0||n>1) || c[2]<=0 || c[3]<=0 || c[0]+c[2]>1.000001 || c[1]+c[3]>1.000001 ||
+            typeof value.sourceSize!=="string" || !/^\d{1,5}x\d{1,5}$/.test(value.sourceSize))throw new Error("Invalid local edit crop.");
+        out.crop=c;out.sourceSize=value.sourceSize;
       }
     }
     return out;

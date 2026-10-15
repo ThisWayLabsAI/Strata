@@ -40,7 +40,7 @@
     dispatch("pointerdown",.2,.2);dispatch("pointermove",.8,.8);dispatch("pointercancel",.8,.8);
     check(Math.abs(controls.settings().region[2]-.3)<.001,"Cancelled gesture restores its previous selection");
   } finally {canvas.setPointerCapture=capture;canvas.releasePointerCapture=release;}
-  change("img-camera","low");change("img-framing","wide");change("img-lighting","golden");
+  change("img-elevation","low");change("img-framing","wide");change("img-lighting","golden");
   check($("img-effective-prompt").value.includes("golden-hour") && $("img-effective-prompt").value.includes("whole scene"),"Visible prompt preview includes camera, framing, lighting and region scope");
   const nativeFetch=window.fetch, requests=[];
   window.fetch=(url,options)=>{if(String(url).includes("v1/images/" ) && options?.method==="POST") requests.push({url,body:JSON.parse(options.body)});return nativeFetch(url,options);};
@@ -50,12 +50,12 @@
     check(requests.length===1 && requests[0].url==="v1/images/edits" && requests[0].body.references.length===2 && requests[0].body.seed===0,"Actual edit submits the marked guide, controls and fixed zero seed");
     check(requests[0].body.prompt.includes("Image 2 is a marked copy") && requests[0].body.prompt.includes("golden-hour"),"Backend receives the same explicit edit instructions as the preview");
     const result=$("img-results").firstElementChild,recipe=StrataImage.read(StrataImage.fromBase64(result.querySelector("a").href.split(",")[1]));
-    check(recipe.editing.camera==="low" && recipe.editing.lighting==="golden" && recipe.editing.region.length===4 && recipe.controlPrompt===$("img-prompt").value,"PNG recipe keeps selected controls, region and the original draft");
+    check(recipe.editing.elevation==="low" && recipe.editing.lighting==="golden" && recipe.editing.region.length===4 && recipe.controlPrompt===$("img-prompt").value,"PNG recipe keeps selected controls, region and the original draft");
     check(recipe.references.length===2 && recipe.references.every(ref=>/^[a-f0-9]{64}$/.test(ref.sha256)) && !JSON.stringify(recipe).includes("data:image"),"Recipe retains guide provenance without private reference bytes");
     const selected=JSON.stringify(controls.settings());applyImageTemplate(StrataImage.starters[0],"make it green");
     check(JSON.stringify(controls.settings())===selected && StrataReferences.request()[0].data===before,"Applying a template preserves presets, region and original references");
     useImageRecipe(recipe);
-    check($("img-prompt").value===recipe.controlPrompt && $("img-camera").value==="low" && !$("img-region-enabled").checked && StrataReferences.request().length===0,"Import restores the draft and presets but requires source and region selection again");
+    check($("img-prompt").value===recipe.controlPrompt && $("img-elevation").value==="low" && !$("img-region-enabled").checked && StrataReferences.request().length===0,"Import restores the draft and presets but requires source and region selection again");
     prepared=controls.prepare($("img-prompt").value,[],"generate");
     check((prepared.prompt.match(/Selected image controls:/g)||[]).length===1,"Recipe reuse does not accumulate duplicate control instructions");
     await upload("new-source.png");await until(()=>$("img-region-canvas").width===600);mode("edit");
