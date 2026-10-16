@@ -606,7 +606,7 @@ function renderChatReferences() {
     const row = document.createElement("div"); row.className = "chat-reference";
     const preview = document.createElement("img"); preview.src = ref.data; preview.alt = `Reference ${index + 1}`; row.append(preview);
     const label = document.createElement("span"); label.textContent = `${index + 1}. ${ref.name}`; row.append(label);
-    const role = document.createElement("select"); role.setAttribute("aria-label", `Reference ${index + 1} role`);
+    const role = document.createElement("select"); role.className = "st-input"; role.setAttribute("aria-label", `Reference ${index + 1} role`);
     for (const value of ["source", "identity", "style", "composition"]) role.add(new Option(value, value));
     role.value = ref.role; role.disabled = !!busy; role.onchange = () => { ref.role = role.value; renderChatReferences(); }; row.append(role);
     for (const [text, action, disabled] of [

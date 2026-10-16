@@ -2,6 +2,10 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Current frontend fix: chat dropdown styling
+
+`fix/chat-image-dropdown-style`, based on `57c63348199585c38aa72d048bba6e6f0c061bc0`, applies the existing Images `st-input` class to chat's Generate/Edit and reference-role dropdowns. Colors, borders, typography, spacing and focus treatment now use the shared component. No operation, reference, backend or config behavior changes. Verification: 69 existing chat-edit fixture checks and 12 light/dark computed-style comparisons passed across 320x568, 390x844 and 1280x844; the mobile screenshot was inspected and browser errors were empty. Deploy the frontend assets together via local fast-forward and hard-refresh, without restarting live. Preserve rollback `rollback/pre-chat-dropdown-style-20261015` at the base commit. GitHub publication remains pending authentication.
+
 ## Current release: explicit reference editing in chat
 
 Application implementation `fcb7c79c` and native-validation release `a5d0c6ae` are deployed locally in `C:\AI\Strata` after a coordinated GPU session. Both local stable checkouts include this release and its deployment notes. It adds explicit Generate/Edit, request-owned reference IDs and ordered roles, attachment selection, and **Edit this image** on saved inline outputs. See [CHAT_IMAGE_EDITING.md](CHAT_IMAGE_EDITING.md) for API, UI and measured limits. Rollback `rollback/pre-chat-image-editing-20261015` preserves `919e9866395de7e1f1ec4958858e585ac7fa735a` in live. Keys, all four machine configs (hash-verified), models, packages, controls and scheduled-task settings are unchanged. GitHub publication remains pending authentication; do not infer remote synchronization.
