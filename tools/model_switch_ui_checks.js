@@ -48,13 +48,14 @@
   } finally { window.fetch = savedFetch; }
   $("input").value = "manual retry";
   await send();
-  $("new-btn").click();
+  const previousThread = currentThreadId();
+  await changeThread();
   await loadChatModels();
   check($("chat-model").value === "original", "New chat uses startup default");
   check(!messages.length, "New chat clears transcript");
-  [...document.querySelectorAll("#toasts button")].at(-1).click();
+  await changeThread(previousThread);
   await loadChatModels();
-  check(conversationModel === "sc117" && messages.at(-1).model === "sc117", "Undo restores transcript and selection together");
+  check(conversationModel === "sc117" && messages.at(-1).model === "sc117", "Opening saved thread restores transcript and selection together");
   await fetch("v1/model-selection", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({model:"original"})});
   await loadChatModels();
   check($("chat-model").value === "sc117", "External switch leaves conversation selection intact");

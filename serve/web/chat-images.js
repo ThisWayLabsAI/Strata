@@ -111,7 +111,7 @@
       tool.result = image.error || "Image request did not complete.";
     }
     if (!ACTIVE.includes(image.state) || image.state === "queued") {
-      if (!saveChat() && image.state === "completed") {
+      if (!await saveChat() && image.state === "completed") {
         image.storageError = "Chat history could not be saved. Download the image before leaving.";
         toast("warn", "Chat image history not saved", image.storageError, 8000);
       }
@@ -125,6 +125,7 @@
     }
   }
   async function action(event, message) {
+    const thread = currentThreadId();
     const button = event.target.closest("[data-chat-image-download], [data-chat-image-template], [data-chat-image-reference]");
     if (!button) return false;
     const id = button.closest("[data-chat-image]").dataset.chatImage, image = message.tools.find(tool => tool.image?.id === id)?.image;
@@ -132,6 +133,7 @@
       if (button.hasAttribute("data-chat-image-reference")) {
         const record = await get(id);
         const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(record.blob); });
+        if (thread !== currentThreadId() || threadTransition) throw new Error("Chat changed. Select the image again in the current chat.");
         if (chatReferences.length) throw new Error("Remove current references before choosing a new edit source.");
         selectChatReference(data, filename(id)); $("chat-image-operation").value = "edit"; renderChatReferences(); $("input").focus();
       }

@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Saved chat library: requested replacement for destructive New
+
+The user explicitly requested a thread library. Replace New's clear/Undo behavior with durable New/Open and explicit confirmed deletion. Archive messages, generated output IDs/recipes, requested model and draft in browser IndexedDB, migrating the existing chat once. Keep transient input bytes out of archives and disclose the need to reattach. Revision checks prevent silent competing-tab overwrites; failed saves preserve the current view and block destructive transitions. The first increment remains browser-local with title search, rename and Markdown export, without a server archive or cross-device synchronization. Browser-only fixtures can validate it while live remains available. [CHAT_THREADS.md](CHAT_THREADS.md) records the contract and evidence; this feature is not deployed yet.
+
 ## Model switching: authorized local deployment
 
 After native validation the user requested deployment for testing. Deploy application `54caf337` by local stable fast-forward and add only the validated two-model registry to live Original's config. Keep Original as startup default, preserve every prior config value, and leave SC117's standalone config/dev configs/controls unchanged. The normal service supports per-conversation Original/SC117 selection; the manual SC117 startup remains the legacy single-model path. Preserve rollback `0b7f7517` and private pre-change backups. Both live selector directions, actual response IDs, refresh persistence, auth, MCP and served assets passed. See the current handoff; GitHub publication remains pending authentication.

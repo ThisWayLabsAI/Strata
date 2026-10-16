@@ -11,13 +11,15 @@
   const preview=$("chat").querySelector(`[data-chat-image="${id}"] img`); await preview.decode();
   check(preview.src.startsWith("blob:"),"Refresh reconstructs preview from IndexedDB without generation");
   const recipe=StrataImage.read(new Uint8Array(await record.blob.arrayBuffer()));check(recipe.seed===0,"PNG recipe survives a real refresh");
-  const backup=messages;
-  $("new-btn").click();
-  [...$("toasts").querySelectorAll("button")].find(button=>button.textContent==="Undo").click();
-  await wait(6700);
-  check(messages===backup && (await StrataChatImages.get(id)).blob instanceof Blob,"Undo preserves transcript and saved image");
-  $("new-btn").click(); await wait(6700);
+  const backup=currentThreadId();
+  await changeThread();
+  check(!messages.length && (await StrataChatImages.get(id)).blob instanceof Blob,"New chat preserves archived images");
+  await changeThread(backup);
+  check(messages.some(m=>m.tools?.some(t=>t.image?.id===id)),"Opening saved chat restores image transcript");
+  await changeThread();
+  const deleted=await StrataThreads.get(backup);
+  await StrataChatImages.remove(await StrataThreads.remove(backup,deleted.revision));
   let missing=false;try{await StrataChatImages.get(id);}catch(_){missing=true;}
-  check(!messages.length && missing,"Clearing chat deletes image blobs after the Undo window");
+  check(!messages.length && missing,"Explicit thread deletion removes its orphan image blobs");
   return {passed:checks.length,checks};
 })();

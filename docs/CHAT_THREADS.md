@@ -1,0 +1,24 @@
+# Saved chat threads
+
+Implemented on `feature/chat-threads`, based on deployed `7a2137ab`. Development only; live has not been updated for this feature.
+
+The header's **Chats** button opens a searchable library. **New chat** saves the current conversation before creating another. Open a saved title to continue, rename it, or explicitly confirm deletion. Each record holds messages, tool results, actual response model identities, requested model and text draft. Titles start with the first user message; custom names survive later saves. The library lists recently saved chats first. Opening a thread only restores browser state; model loading happens on Send.
+
+The former `strata.chat` and `strata.chatModel` are imported once into IndexedDB, atomically with a migration marker. Existing generated image blobs remain in `strata.chatImages`; transcript records retain their image IDs and recipes. New chat never deletes them. Confirmed deletion removes only images unreferenced by other saved threads. Image cleanup failure is reported and may leave unused blobs until browser storage is cleared. An interrupted generation is displayed as interrupted; opening history never regenerates an image.
+
+Thread records are in `strata.chatThreads`, with separate lightweight index records for searching/listing. Each write and delete checks a revision in the same IndexedDB transaction. Competing tabs cannot silently overwrite each other. Saves are queued in order within a tab. Active selection is remembered per tab, with the most recently opened browser thread as the default for a new tab. A failed write blocks New/Open/Delete and preserves the current in-memory conversation. A persistent error asks the user to export before reloading. Export includes unsent draft text. Initialization failure preserves the legacy chat for export and disables sending until storage works after reload.
+
+Changing threads waits for generation and file reading to finish, flushes the current draft, and clears temporary upload/reference selections. The text draft is saved after 350 ms of inactivity and when leaving the page visible state. An immediate browser termination can lose changes not yet committed. Uploaded source bytes and text-file contents are not archived; reattach those inputs when needed. Generated output PNGs remain browser-local blobs. Markdown export includes recipes and download filenames, not the PNG files themselves; download important images separately.
+
+Storage belongs to this browser profile and exact Strata origin (scheme, host and port). There is no server archive, cross-device synchronization or archive import. Clearing site data removes the library and images. Engine sessions remain independent prompt caches. Sampling/image settings remain browser-wide; requested chat model and text draft belong to each thread.
+
+## Validation
+
+CPU fixtures only, Chromium 154 on Windows; no GPU engine or live stop was needed. Live remained on `7a2137ab`, with `/health` reporting `ok` after testing. No keys, configs, models, packages, controls or scheduled tasks changed.
+
+- Six sizes: 320x568, 390x844, 844x390, 1280x844, 390x300 and 320x256. Each passed 22 thread-library, 26 model-selector and 33 mobile-chat assertions (486 total). The final thread suite adds continuation history/model transport, custom-name retention, simultaneous writers and current-thread deletion: 26 assertions passed at 390x844 after final tab-selection/focus/draft changes.
+- Five legacy migration assertions passed after a real refresh, including original model choice, one-time import and refusal to replace history on repeated import.
+- Existing image generation (19), reference editing (23), edited-output refresh (5) and generated-image refresh/archive/delete (7) checks passed. These verify transport/storage, not image model quality.
+- JavaScript syntax and `git diff --check` passed. The mobile library screenshot was inspected; browser error list was empty.
+
+Reproduce with `python tools/model_switch_fixture.py` on 8092 and `python tools/mobile_chat_fixture.py` on 8091, using isolated agent-browser sessions. Run `tools/chat_thread_ui_checks.js` and `tools/model_switch_ui_checks.js` on 8092; image/mobile scripts run on 8091. `tools/chat_thread_migration_checks.js` documents fresh-profile legacy seeding. Never run these mutation scripts against live user history. Evidence is local under `C:\AI\Strata-data\logs\chat-threads-20261015`. Actual phones, other browsers, large archives and sudden power-loss recovery have not been tested.

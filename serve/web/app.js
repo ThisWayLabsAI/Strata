@@ -591,15 +591,17 @@ async function loadChatModels() {
       select.dataset.options = signature;
     }
     if (select.value !== requested) select.value = requested;
-    select.disabled = !!busy;
+    select.disabled = !!busy || threadTransition || !threadsReady;
     $("chat-model-row").hidden = false;
     $("chat-model-settings").hidden = false;
     $("chat-model-status").textContent = `Requested: ${requested}. Active: ${modelSelection.active_model} (${modelSelection.loaded ? "loaded" : "unloaded"}). Selection applies on Send.`;
   } catch (e) { if (request === modelStatusRequest) $("chat-model-status").textContent = "Model status unavailable. Retry by refreshing before sending."; }
 }
 $("chat-model").onchange = () => {
+  if (!threadsReady || threadTransition || busy) return;
   conversationModel = $("chat-model").value;
   store.set("chatModel", conversationModel);
+  saveChat();
   loadChatModels();
 };
 $("chat-model-settings").onclick = () => {
@@ -620,18 +622,152 @@ let chatScrollFrame = 0;
 let readingAnchor = null;
 const mobileViewport = matchMedia("(max-width: 900px), (pointer: coarse)");
 
-function saveChat() {
-  const saved = messages.map((m) => ({...m, images: (m.images || []).map((i) => ({name: i.name})),
-                                         files: (m.files || []).map((f) => ({name: f.name}))}));
-  store.set("chat", saved);
-  return JSON.stringify(store.get("chat", null)) === JSON.stringify(saved);
+let activeThread = null, threadsReady = false, threadTransition = false;
+let threadQueue = Promise.resolve(true), draftTimer;
+const threadRevisions = new Map();
+function currentThreadId() { return activeThread?.id; }
+function threadError(error) {
+  $("thread-storage-error").hidden = false;
+  $("thread-storage-error").textContent = `Chat not saved: ${error.message}. Keep this page open and export your chat before reloading.`;
 }
-StrataChatImages.recover(messages);
+function saveChat() {
+  if (!threadsReady || !activeThread) return Promise.resolve(false);
+  const snapshot = {...activeThread, messages:StrataThreads.clean(messages), model:conversationModel, draft:$("input").value};
+  const pending = threadQueue.then(async () => {
+    try {
+      const saved = await StrataThreads.save(snapshot, threadRevisions.get(snapshot.id));
+      threadRevisions.set(saved.id, saved.revision);
+      if (activeThread?.id === saved.id) {
+        activeThread = {...saved, messages};
+        $("thread-title").textContent = saved.title;
+        $("thread-storage-error").hidden = true;
+        // Compatibility copy for older clients; IndexedDB is the canonical library.
+        store.set("chat", saved.messages); store.set("chatModel", saved.model);
+      }
+      return true;
+    } catch (error) { threadError(error); return false; }
+  });
+  threadQueue = pending;
+  return pending;
+}
+function installThread(record) {
+  activeThread = record; threadRevisions.set(record.id, record.revision);
+  messages = record.messages; conversationModel = record.model;
+  StrataChatImages.recover(messages);
+  $("input").value = record.draft || "";
+  attachments = []; chatReferences.splice(0);
+  store.set("activeThread", record.id); store.set("chatModel", conversationModel);
+  try { sessionStorage.setItem("strata.activeThread", record.id); } catch (_) {}
+  store.set("chat", StrataThreads.clean(messages));
+  $("thread-title").textContent = record.title;
+  $("thread-storage-error").hidden = true;
+  renderChatReferences(); renderAttachments(); renderChat(); autosize(); loadChatModels();
+}
+function canChangeThread() {
+  if (!threadsReady || threadTransition || busy || attachmentReads) {
+    toast("warn", "Please wait", "Finish the answer or file reading before changing chats."); return false;
+  }
+  return true;
+}
+async function changeThread(id = null) {
+  if (!canChangeThread()) return;
+  threadTransition = true; clearTimeout(draftTimer); setBusy(false);
+  try {
+    if (!await saveChat()) return;
+    const record = id ? await StrataThreads.get(id) : StrataThreads.fresh();
+    if (!record) throw new Error("That chat was deleted in another tab. Refresh the library");
+    if (!id) {
+      const saved = await StrataThreads.save(record, 0);
+      installThread(saved);
+    } else installThread(record);
+    $("threads-dialog").close();
+  } catch (error) { threadError(error); }
+  finally { threadTransition = false; setBusy(false); if (!$("threads-dialog").open) $("input").focus(); }
+}
+async function initializeThreads() {
+  try {
+    const migrated = await StrataThreads.initialize(messages, conversationModel);
+    const records = await StrataThreads.list();
+    let remembered = store.get("activeThread", null);
+    try { remembered = sessionStorage.getItem("strata.activeThread") || remembered; } catch (_) {}
+    const record = await StrataThreads.get(migrated || remembered) || (records[0] && await StrataThreads.get(records[0].id));
+    installThread(record || await StrataThreads.save(StrataThreads.fresh(), 0));
+    threadsReady = true;
+  } catch (error) { threadError(error); }
+  setBusy(false);
+}
+let libraryRecords = [], libraryEdit = null;
+function renderThreadList() {
+  const list = $("threads-list"); list.replaceChildren();
+  const query = $("threads-search").value.toLocaleLowerCase();
+  for (const record of libraryRecords.filter(r => r.title.toLocaleLowerCase().includes(query))) {
+    const row = document.createElement("div"); row.className = "thread-row";
+    const open = document.createElement("button"); open.className = "st-btn thread-open";
+    open.textContent = `${record.title}${record.id === currentThreadId() ? " · current" : ""}`;
+    open.onclick = () => changeThread(record.id); row.append(open);
+    const detail = document.createElement("div"); detail.className = "muted small";
+    detail.textContent = `${new Date(record.updated).toLocaleString()} · ${record.count} messages${record.model ? ` · ${record.model}` : ""}`; row.append(detail);
+    const actions = document.createElement("div"); actions.className = "thread-actions";
+    for (const action of ["Rename", "Delete"]) {
+      const button = document.createElement("button"); button.className = "st-btn"; button.textContent = action;
+      button.onclick = () => {
+        if (!canChangeThread()) return;
+        libraryEdit = {record, action}; $("threads-editor").hidden = false;
+        $("threads-name").hidden = action === "Delete"; $("threads-editor-label").hidden = action === "Delete";
+        $("threads-name").value = record.title;
+        $("threads-confirm").textContent = action === "Delete" ? "Delete chat" : "Save name";
+        $("threads-confirm-text").textContent = action === "Delete" ? `Delete “${record.title}” and its saved generated images? This cannot be undone.` : "";
+        $(action === "Delete" ? "threads-confirm" : "threads-name").focus();
+      }; actions.append(button);
+    }
+    row.append(actions); list.append(row);
+  }
+  $("threads-status").textContent = list.children.length ? `${list.children.length} chats` : "No chats match.";
+}
+async function refreshThreads() {
+  try { await threadQueue; libraryRecords = await StrataThreads.list(); renderThreadList(); }
+  catch (error) { $("threads-status").textContent = error.message; }
+}
+$("threads-btn").onclick = async () => {
+  $("threads-editor").hidden = true; $("threads-dialog").showModal();
+  if (threadsReady && !busy && !threadTransition) await saveChat();
+  await refreshThreads();
+};
+$("threads-close").onclick = () => $("threads-dialog").close();
+$("threads-search").oninput = renderThreadList;
+$("threads-new").onclick = () => changeThread();
+$("threads-cancel").onclick = () => { libraryEdit = null; $("threads-editor").hidden = true; };
+$("threads-editor").onsubmit = async event => {
+  event.preventDefault(); if (!libraryEdit || !canChangeThread()) return;
+  const {record, action} = libraryEdit;
+  const name = StrataThreads.title($("threads-name").value);
+  if (action === "Rename" && !name) { $("threads-name").focus(); return; }
+  threadTransition = true; clearTimeout(draftTimer); setBusy(false);
+  try {
+    if (!await saveChat()) return;
+    // Our flush may have advanced the active record. Other records retain the displayed revision.
+    const revision = record.id === currentThreadId() ? activeThread.revision : record.revision;
+    if (action === "Rename") {
+      const target = await StrataThreads.get(record.id);
+      if (!target) throw new Error("Chat was deleted in another tab");
+      const saved = await StrataThreads.save({...target, title:name, renamed:true}, revision);
+      if (record.id === currentThreadId()) { activeThread = {...saved, messages}; threadRevisions.set(saved.id,saved.revision); $("thread-title").textContent = saved.title; }
+    } else {
+      // Prepare a replacement before deleting the current chat, so a failed write cannot discard it.
+      const replacement = record.id === currentThreadId() ? await StrataThreads.save(StrataThreads.fresh(),0) : null;
+      const ids = await StrataThreads.remove(record.id, revision);
+      if (replacement) installThread(replacement);
+      await StrataChatImages.remove(ids);
+    }
+    libraryEdit = null; $("threads-editor").hidden = true; await refreshThreads();
+  } catch (error) { $("threads-status").textContent = error.message; }
+  finally { threadTransition = false; setBusy(false); }
+};
 $("chat-image-enabled").checked = store.get("chatImageTools", false) === true;
 $("chat-image-enabled").onchange = () => { store.set("chatImageTools", $("chat-image-enabled").checked); renderChatReferences(); renderAttachments(); };
 const chatReferences = []; // Transient selected bytes; never written to transcript/localStorage.
 function selectChatReference(data, name) {
-  if (busy || attachmentReads) throw new Error("Wait for the current request or file reading to finish.");
+  if (busy || attachmentReads || threadTransition) throw new Error("Wait for the current request or file reading to finish.");
   if (!health.chat_image_editing) throw new Error("Chat references require the updated server. Use Images for now.");
   if (chatReferences.length >= 3) throw new Error("Use at most three references. Remove one first.");
   chatReferences.push({id: crypto.randomUUID(), data, name, role: chatReferences.length ? "identity" : "source"});
@@ -946,17 +1082,19 @@ function assistantMessages(m) {
 }
 
 function setBusy(on) {
-  $("chat-model").disabled = on;
+  $("input").disabled = threadTransition || !threadsReady;
+  $("new-btn").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
+  $("chat-model").disabled = on || threadTransition || !threadsReady;
   $("chat-model-settings").disabled = on;
   $("stop-btn").hidden = !on;
-  $("send-btn").disabled = on || attachmentReads > 0;
+  $("send-btn").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
   renderChatReferences(); renderAttachments();
 }
 
 async function send() {
   const text = $("input").value.trim();
-  if ((!text && !attachments.length) || busy || attachmentReads) return;
+  if ((!text && !attachments.length) || busy || attachmentReads || threadTransition || !threadsReady) return;
   if (modelSelection && !conversationModel) {
     conversationModel = modelSelection.default_model;
     store.set("chatModel", conversationModel);
@@ -1094,32 +1232,19 @@ function autosize() {
   t.style.height = `${Math.min(t.scrollHeight, Math.max(48, height * (mobileChat ? 0.25 : 0.4)))}px`;
 }
 $("input").addEventListener("input", autosize);
+$("input").addEventListener("input", () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveChat, 350); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && threadsReady && !threadTransition) saveChat(); });
 
-$("new-btn").onclick = () => {
-  if (busy) { toast("warn", "Still writing", "Stop the answer first."); return; }
-  if (!messages.length) { conversationModel = null; store.set("chatModel", null); loadChatModels(); return; }
-  const backup = messages;
-  const modelBackup = conversationModel;
-  conversationModel = null; store.set("chatModel", null); loadChatModels();
-  const referenceBackup = chatReferences.splice(0);
-  renderChatReferences(); renderAttachments();
-  let undone = false;
-  const imageIds = backup.flatMap(message => (message.tools || []).map(tool => tool.image?.id).filter(Boolean));
-  messages = [];
-  saveChat();
-  renderChat();
-  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; conversationModel = modelBackup; store.set("chatModel", conversationModel); loadChatModels(); chatReferences.splice(0, chatReferences.length, ...referenceBackup); renderChatReferences(); renderAttachments(); saveChat(); renderChat(); }});
-  setTimeout(() => { if (!undone) StrataChatImages.remove([...new Set(imageIds)]); }, 6500);
-};
+$("new-btn").onclick = () => changeThread();
 $("export-btn").onclick = () => {
-  if (!messages.length) { toast("info", "Nothing to save yet"); return; }
+  if (!messages.length && !$("input").value.trim()) { toast("info", "Nothing to save yet"); return; }
   const tools = (m) => (m.tools || []).filter((t) => t.result != null).map((t) =>
     `<details><summary>Tool ${t.server ? `${t.server} / ` : ""}${t.tool || t.name}${t.ok ? "" : " (error)"}</summary>\n\n` +
     `\`\`\`json\n${JSON.stringify(t.arguments || {}, null, 2)}\n\`\`\`\n\n\`\`\`\n${t.result}\n\`\`\`\n\n</details>\n\n`).join("");
   const md = messages.map((m) => m.role === "user" ? `## You\n\n${m.text}\n` :
     `## ${m.model || health.model}\n\n${m.reasoning ? `<details><summary>Thinking</summary>\n\n${m.reasoning}\n\n</details>\n\n` : ""}${tools(m)}${m.text || m.error || ""}${StrataChatImages.exported(m)}\n`).join("\n");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([md], {type: "text/markdown"}));
+  a.href = URL.createObjectURL(new Blob([md, $("input").value.trim() ? `\n## Draft (not sent)\n\n${$("input").value}\n` : ""], {type: "text/markdown"}));
   a.download = `strata-chat-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -1133,6 +1258,7 @@ function isTextFile(f) {
          TEXT_EXT.test(f.name) || /(^|[\\/])(makefile|dockerfile|readme|license)$/i.test(f.name);
 }
 function addFiles(files, {imageOnly = false} = {}) {
+  if (threadTransition || !threadsReady) return;
   for (const f of files) {
     if (imageOnly || f.type.startsWith("image/") || /\.png$/i.test(f.name)) {
       if (f.size > 20e6) { toast("warn", "Picture too large", `${f.name} is over 20 MB.`); continue; }
@@ -1144,6 +1270,9 @@ function addFiles(files, {imageOnly = false} = {}) {
     if (!isTextFile(f)) { toast("warn", "Not a text file", `${f.name}: attach text files (code, notes, logs, data)${health.images ? " or pictures" : ""}.`); continue; }
     if (f.size > MAX_TEXT_FILE) { toast("warn", "File too large", `${f.name} is over 512 KB.`); continue; }
     const r = new FileReader();
+    attachmentReads++; setBusy(!!busy);
+    r.onloadend = () => { attachmentReads--; setBusy(!!busy); };
+    r.onerror = () => toast("error", "Could not read file", f.name);
     r.onload = () => {
       const text = String(r.result);
       if (text.includes("\u0000")) { toast("warn", "Not a text file", `${f.name} looks like a binary file.`); return; }
@@ -1317,7 +1446,7 @@ setBusy(false);
 renderChat();
 const startQuestion = new URLSearchParams(location.search).get("q");   // /?q=... starts a chat (a shortcut)
 if (startQuestion) history.replaceState(null, "", location.pathname + location.hash);
-loadHealth().then(loadMcp).then(() => { if (startQuestion) { $("input").value = startQuestion; send(); } });
+Promise.all([initializeThreads(), loadHealth().then(loadMcp)]).then(() => { if (startQuestion) { $("input").value = startQuestion; send(); } });
 showTab(location.hash.slice(1) || "chat");
 poll();
 
@@ -1516,10 +1645,12 @@ $("img-delete-template").onclick = () => {
   persistImageTemplates(); renderImageTemplates();
 };
 function discussImageRecipe(metadata, url, name = "generated-image.png") {
+  if (!threadsReady || threadTransition) { toast("warn", "Please wait", "Chat storage is still opening."); return; }
   attachments.push({kind: "file", imageRecipe: true, name: `${name}.recipe.json`, text: JSON.stringify(StrataImage.recipe(metadata), null, 2)});
   if (health.images) attachments.push({kind: "image", name, url});
   renderAttachments(); showTab("chat");
   if (!$("input").value.trim()) $("input").value = "Help me revise this image using its generation recipe.";
+  saveChat();
   autosize();
 }
 function showImageResult(base64, value, annotate = true) {

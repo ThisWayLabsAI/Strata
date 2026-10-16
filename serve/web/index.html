@@ -31,6 +31,7 @@
       <svg class="st-icon st-icon--sm"><use href="web/sprite.svg#i-info"/></svg>About</button>
   </nav>
   <span class="st-header__spacer"></span>
+  <button class="st-btn st-btn--secondary" id="threads-btn" aria-haspopup="dialog">Chats</button>
   <span class="st-pill" id="pill" data-state="idle" role="status" aria-live="polite">
     <span class="st-pill__dot"></span><span id="pill-text">Connecting&hellip;</span></span>
   <button class="st-btn st-btn--icon" id="theme-btn" title="Light / dark" aria-label="Switch between light and dark">
@@ -41,6 +42,8 @@
   <!-- ============================ Chat ============================ -->
   <section class="view view--chat" id="view-chat" role="tabpanel" aria-labelledby="tab-btn-chat">
     <div class="chat-scroll" id="chat-scroll">
+      <div id="thread-title" class="thread-title"></div>
+      <p id="thread-storage-error" role="alert" hidden></p>
       <div class="chat" id="chat">
         <div class="chat-empty" id="chat-empty">
           <div class="chat-empty__title">Ask anything</div>
@@ -388,6 +391,20 @@
 </dialog>
 <div class="st-toasts" id="toasts" aria-live="polite"></div>
 <script src="web/image-tools.js"></script>
+<dialog id="threads-dialog" aria-labelledby="threads-title">
+  <div class="thread-actions"><h2 id="threads-title">Saved chats</h2><button class="st-btn" id="threads-close" autofocus>Close</button></div>
+  <p class="muted small">Saved in this browser on this Strata address. Export important chats for a separate copy. Uploaded files and edit references need reattaching.</p>
+  <div class="thread-actions"><input class="st-input" id="threads-search" type="search" placeholder="Search titles" aria-label="Search chat titles"><button class="st-btn" id="threads-new">New chat</button></div>
+  <p id="threads-status" role="status"></p>
+  <div id="threads-list"></div>
+  <form id="threads-editor" hidden>
+    <label id="threads-editor-label" for="threads-name">Chat name</label>
+    <input class="st-input" id="threads-name" maxlength="120">
+    <p id="threads-confirm-text"></p>
+    <div class="thread-actions"><button class="st-btn" type="submit" id="threads-confirm">Save</button><button class="st-btn" type="button" id="threads-cancel">Cancel</button></div>
+  </form>
+</dialog>
+<script src="web/chat-threads.js"></script>
 <script src="web/chat-images.js"></script>
 <script src="web/app.js"></script>
 <script src="web/image-references.js"></script>

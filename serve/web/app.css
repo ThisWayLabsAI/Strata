@@ -344,3 +344,16 @@ html[data-chat-compact="true"] #chat-model-row:not([hidden]) {
   max-height: min(220px, calc(var(--chat-viewport-height, 100dvh) - 180px)); overflow: auto;
 }
 html[data-chat-compact="true"] #chat-model-row:not([data-open="true"]) { display: none; }
+
+.thread-title, #thread-storage-error { max-width: 850px; margin: 12px auto; padding: 0 16px; overflow-wrap: anywhere; }
+.thread-title { font-size: 0.85rem; color: var(--st-ink-muted); }
+#thread-storage-error { color: var(--st-danger, #b42318); }
+#threads-dialog { box-sizing: border-box; width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 16px; border: 1px solid var(--st-line); border-radius: 12px; color: var(--st-ink); background: var(--st-bg); }
+#threads-dialog::backdrop { background: #0008; }
+.thread-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.thread-actions h2 { flex: 1; margin: 0; }
+.thread-actions .st-input { flex: 1; min-width: 100px; }
+#threads-dialog button, #threads-search, #threads-name, #threads-btn { min-height: 44px; }
+.thread-row { border-top: 1px solid var(--st-line); padding: 12px 0; }
+.thread-open { text-align: left; white-space: normal; overflow-wrap: anywhere; width: 100%; justify-content: flex-start; }
+#threads-editor { border-top: 1px solid var(--st-line); padding-top: 12px; }

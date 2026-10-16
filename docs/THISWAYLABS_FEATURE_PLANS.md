@@ -1,5 +1,9 @@
 # Thiswaylabs feature plans
 
+## Requested follow-up: saved chat library
+
+Implemented in development on `feature/chat-threads`; live remains `7a2137ab`. Acceptance: New preserves old chats; searchable library opens, renames and confirms deletion; messages, generated outputs, requested models and drafts survive reopening/refresh; existing single chat migrates once; opening never runs inference; storage failure and competing tabs cannot silently discard history; uploads/references remain explicitly temporary; controls fit mobile keyboard layouts. CPU/browser checks passed as recorded in [CHAT_THREADS.md](CHAT_THREADS.md). Local deployment is pending; server archives, synchronization and import are outside this increment.
+
 Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, PNG recipes/templates, reference editing in Images, opt-in chat image generation/editing and [model switching](MODEL_SWITCHING.md) are deployed locally; see [the current handoff](THISWAYLABS_HANDOFF.md). Model-switching application `54caf337`, based on prior live `0b7f7517`, passed mock/fixture, coordinated Original/SC117 native API/browser checks and live selector verification. The user authorized local deployment and Original's live config now opts into the registry, preserving its startup default and all previous values. Original remains the normal startup model. GitHub publication remains pending authentication.
 
 The user confirmed that enabled chat generation worked and accepted moving on while continuing testing. The text-to-image increment is accepted within its documented limits. [Implementation decisions](THISWAYLABS_DECISIONS.md) record the boundaries and release evidence. Existing acceptance lists below retain the original goals; actual coverage and outstanding device/backend checks are recorded in the handoff, not implied by acceptance of the increment.

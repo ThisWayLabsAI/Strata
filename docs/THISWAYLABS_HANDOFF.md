@@ -2,6 +2,12 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## In development: saved chat library
+
+The user requested a proper thread library after confirming New cleared the previous conversation. `feature/chat-threads`, based on stable/live `7a2137ab`, implements New/Open/search/Rename/confirmed Delete, per-thread model and draft, one-time legacy chat migration, retained generated images and guarded IndexedDB revisions across tabs. New preserves history and images. Temporary uploads/references need reattaching; browser-local storage does not synchronize phone and desktop. Export now includes unsent draft text. See [CHAT_THREADS.md](CHAT_THREADS.md) for behavior, limits and reproducible fixture checks.
+
+Validation passed: 486 assertions across six screen sizes (22 threads + 26 model selector + 33 mobile chat each), final expanded 26-thread suite, five real-refresh migration checks and 54 image/edit/refresh/archive/delete assertions. Chromium 154 mobile screenshot inspected; browser errors empty. Evidence: `Strata-data\logs\chat-threads-20261015`. CPU mocks only. Live was not stopped or deployed and remains `7a2137ab`; health returned `ok`. Keys, models, configs, controls, packages and scheduled task remain untouched. GitHub publication is still pending authentication; camera controls remain experimental. Deploy through the established fork workflow when requested; no native GPU gate is needed for these browser-only changes.
+
 ## Current release: model switching deployed for user testing
 
 The user explicitly requested deployment after the native gate. Application `54caf337f77b8fc13db5914ebc18df0035d92671` was fast-forwarded into both local stable `thiswaylabs` checkouts through a verified local Git bundle. Rollback `rollback/pre-model-switcher-20261015` preserves previous live `0b7f75172f61c01d27c6cdc2f184b667ec5d319a`. GitHub publication remains pending authentication; no remote push/merge is implied. Native validation and earlier implementation details below are historical snapshots, superseded by this deployment state.
