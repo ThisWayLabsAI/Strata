@@ -1,6 +1,6 @@
 # Reference images and editing in chat
 
-Thiswaylabs fork, 2026-10-15. Implemented on `feature/chat-image-editing`, based on live/stable `919e9866`. This increment is **development only** until coordinated GPU smoke tests and rollout. Live Images editing stays available on the stable version. GitHub publication is pending authentication.
+Thiswaylabs fork, 2026-10-15. Application implementation `fcb7c79c`, based on stable `919e9866`, passed coordinated Original and SC117 GPU validation. See the handoff for final local rollout state. GitHub publication is pending authentication.
 
 ## Use it
 
@@ -55,3 +55,15 @@ node tools/test_image_edit_controls.js
 Browser fixtures: `tools/mobile_chat_fixture.py` on isolated port 8091, with `tools/chat_image_editing_ui_checks.js` for selection/edit/reuse/roles/Stop, and `tools/chat_image_editing_reload_checks.js` after a real refresh. Existing chat-image, Images-reference and mobile suites also apply. Never run destructive fixture checks against live.
 
 Hardware release gate: finish active user jobs, stop live through the existing controls, verify 8080 is stopped, and run one development server at a time on 8081. Test Original and SC117 chat → referenced Generate/Edit → chat, distinguishable input images, actual output inspection, seed/policy, cancellation and restoration. Stop development and restore live through existing controls. Do not change configs or load a second GPU server to avoid coordinating this gate. Only then use the documented local bundle/fast-forward rollout with rollback at `919e9866`; publication remains pending authentication.
+
+## Native validation, 2026-10-15
+
+The user authorized the coordinated pause after initially deferring it. Live was idle and stopped with the existing control; Original and SC117 development servers ran sequentially on 8081 and were stopped afterward. `tools/chat_image_editing_smoke.py` uses the installed Python/configs and creates only deterministic test fixtures and evidence under Strata-data. It refuses occupied live/dev ports, never retries jobs, and cleans up its owned server in `finally`.
+
+Hardware: RTX 3090, 24 GiB, CUDA, Qwen-Image-2.1-Turbo Q8_0, 8 steps, configured policy `auto`, observed unload/save/reload/restore. Both models generated at 512x512 with seed 901 from a red robot source plus a distinct orange-striped style input, then edited the original source at seed 902 to make its red parts green. Normalized input hashes and ordered roles matched each recipe. The completed images survived chat continuation, and both models answered 17×23 = 391 after each handoff. Disconnect at reported sampling step 1/8 cancelled an additional edit, released ownership and allowed a correct subsequent chat request. No failed request was replayed.
+
+All four outputs were visually inspected. Both green edits retained the source's yellow chest star, blue legs, frontal pose and grey background in these simple fixtures. Original's referenced Generate retained those distinguishing features while adding the style and platform. SC117's Generate used the orange-striped style and robot motif but substantially redesigned the robot and omitted the source star. This is a documented identity-fidelity limit, not a promise of exact preservation or general scene/camera compliance.
+
+End-to-end chat → image → chat measured 37.34 s (Original Generate), 35.00 s (Original Edit); SC117 timings are recorded in its local report. These are short smoke runs including chat and restoration, not generation-only benchmarks. Original evidence: `C:\AI\Strata-data\logs\chat-image-editing-20261015-173110`; SC117 evidence: `C:\AI\Strata-data\logs\chat-image-editing-20261015-173415`. Reports/images/logs stay outside Git. Original's initial shutdown check mistook Windows TIME_WAIT sockets for a listener; a separate TCP-listener query verified no server, and the corrected guard admitted SC117 only afterward. Its transport/recovery checks had already passed. SC117's final listener check passed. All four local config hashes remained unchanged.
+
+Post-rollout checks: `tools/chat_image_editing_live_check.py --report <local evidence path>` verifies authenticated service capability, served assets against source, unauthenticated chat rejection, web MCP tools, ordinary chat and idle state. `tools/chat_image_editing_native_ui_checks.js` inspects an explicitly requested native seed-904 edit in an isolated browser; it does not send requests or clear user history.
