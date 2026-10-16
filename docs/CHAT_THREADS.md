@@ -1,6 +1,6 @@
 # Saved chat threads
 
-Implemented on `feature/chat-threads`, based on deployed `7a2137ab`. Development only; live has not been updated for this feature.
+Application `ee3204a8`, based on `7a2137ab`, is deployed locally in `C:\AI\Strata` on stable `thiswaylabs` at the user's request. Refresh the app and open **Chats** to test. GitHub publication remains pending authentication.
 
 The header's **Chats** button opens a searchable library. **New chat** saves the current conversation before creating another. Open a saved title to continue, rename it, or explicitly confirm deletion. Each record holds messages, tool results, actual response model identities, requested model and text draft. Titles start with the first user message; custom names survive later saves. The library lists recently saved chats first. Opening a thread only restores browser state; model loading happens on Send.
 
@@ -13,6 +13,8 @@ Changing threads waits for generation and file reading to finish, flushes the cu
 Storage belongs to this browser profile and exact Strata origin (scheme, host and port). There is no server archive, cross-device synchronization or archive import. Clearing site data removes the library and images. Engine sessions remain independent prompt caches. Sampling/image settings remain browser-wide; requested chat model and text draft belong to each thread.
 
 ## Validation
+
+Deployment used a verified local bundle and stable fast-forward, with idle live stopped by the existing elevated control and zero live/dev listeners or native workers confirmed before source changed. The existing scheduled task restarted Strata. Live health returned `ok`, both switchable model IDs remained available, unauthenticated chat returned 401, and the five changed HTML/JS/CSS assets matched source hashes. All four live/dev configs retained their pre-deployment SHA-256 values. An isolated 390x844 browser verified New/Open and draft restoration through a real refresh, with no inference and no browser errors; its screenshot was inspected. Rollback `rollback/pre-chat-threads-20261015` retains `7a2137ab`. The verified bundle, config hashes and deployment report are in `C:\AI\Strata-data\backups\chat-threads-deploy-20261015-1`. User browser data was not accessed.
 
 CPU fixtures only, Chromium 154 on Windows; no GPU engine or live stop was needed. Live remained on `7a2137ab`, with `/health` reporting `ok` after testing. No keys, configs, models, packages, controls or scheduled tasks changed.
 

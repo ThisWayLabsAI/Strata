@@ -2,7 +2,13 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
-## In development: saved chat library
+## Current release: saved chat library deployed for user testing
+
+The user explicitly requested deployment to `C:\AI\Strata`. Application `ee3204a8` was fast-forwarded into both local stable `thiswaylabs` checkouts using a verified local Git bundle. Rollback `rollback/pre-chat-threads-20261015` preserves previous live `7a2137ab`. Live was idle, the existing elevated Stop control exited successfully, and zero live/dev listeners/native workers were verified before source changed. Restart used the unchanged `Strata - Qwen` scheduled task. Live health, both model IDs, unauthenticated rejection (401), and exact served hashes for the five changed HTML/JS/CSS assets passed. An isolated 390x844 browser verified New/Open and draft persistence through refresh without inference; screenshot inspected and browser errors empty. All four live/dev configs matched pre-deployment hashes. No user browser history was accessed. Bundle, hashes and report: `Strata-data\backups\chat-threads-deploy-20261015-1`; screenshot: `Strata-data\logs\chat-threads-20261015\live-library.png`. Git connectivity verification passed after bundle import. GitHub publication remains pending authentication; camera controls remain experimental.
+
+Refresh the normal app and open **Chats**. The old saved conversation migrates in each browser when the new app first opens. Browser/device/origin libraries remain separate; temporary uploaded inputs need reattaching. No engine, model, package, key, config, control or task changes were needed.
+
+## Saved chat library: pre-deployment validation
 
 The user requested a proper thread library after confirming New cleared the previous conversation. `feature/chat-threads`, based on stable/live `7a2137ab`, implements New/Open/search/Rename/confirmed Delete, per-thread model and draft, one-time legacy chat migration, retained generated images and guarded IndexedDB revisions across tabs. New preserves history and images. Temporary uploads/references need reattaching; browser-local storage does not synchronize phone and desktop. Export now includes unsent draft text. See [CHAT_THREADS.md](CHAT_THREADS.md) for behavior, limits and reproducible fixture checks.
 
