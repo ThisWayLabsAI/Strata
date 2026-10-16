@@ -639,13 +639,18 @@ $("composer-options-toggle").onclick = () => {
   $("chat-options").dataset.open = String(open);
   $("composer-options-toggle").setAttribute("aria-expanded", String(open));
 };
+function closeChatOptions() {
+  $("chat-options").dataset.open = "false";
+  $("composer-options-toggle").setAttribute("aria-expanded", "false");
+  $("composer-options-toggle").focus();
+}
+$("chat-options-close")?.addEventListener("click", closeChatOptions);
+$("chat-options-backdrop")?.addEventListener("click", closeChatOptions);
 $("chat-options-new").onclick = () => $("new-btn").click();
 $("chat-options-export").onclick = () => $("export-btn").click();
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("chat-options").dataset.open === "true") {
-    $("chat-options").dataset.open = "false";
-    $("composer-options-toggle").setAttribute("aria-expanded", "false");
-    $("composer-options-toggle").focus();
+    closeChatOptions();
   }
 });
 let followLatest = true;

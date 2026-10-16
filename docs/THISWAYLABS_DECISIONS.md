@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Mobile Options: separate settings from the response
+
+At the user's request, give Options a raised theme-aware surface, a clear heading/close control and an active toggle style. Dim only the response behind it, with outside-tap dismissal; preserve the draft and leave the composer/Send/Stop accessible above the layer. Keep one source of panel state and retain the existing desktop inline layout. Validate both themes, pointer hit-testing and keyboard dismissal in the CPU fixtures, then use the compatible static-file deployment path. The user has confirmed the preceding keyboard-spacing fix on their phone.
+
 ## Keyboard gap: resize content and avoid a second bottom inset
 
 Deployment of application `ba9fb2a1` used a verified local fast-forward of browser files while live remained running, after Windows canceled the planned stop. The runtime diff contains only backward-compatible HTML/CSS/JS, and the server's static handlers read files on each request. This avoided retrying the denied privileged action and preserved the process/GPU state. Exact served hashes, unchanged PID/config hashes and health verified the result. The existing stop/zero-worker/restart gate still applies to backend, native, configuration or dependency changes; no exception for those is implied.

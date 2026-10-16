@@ -406,3 +406,22 @@ html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer > :not(#
 html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer-expand { display: flex; justify-content: flex-start; flex: 1; min-width: 0; min-height: 44px; text-align: left; color: var(--st-ink-muted); background: transparent; }
 html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer .st-composer__bar > :not(#stop-btn) { display: none !important; }
 html[data-mobile-chat="true"][data-composer-collapsed="true"]:not([data-chat-busy="true"]) #composer .st-composer__bar { display: none; }
+
+/* A distinct mobile settings surface above a dimmed conversation. */
+#chat-options-backdrop, #chat-options-heading { display: none; }
+html[data-mobile-chat="true"] .view--chat { position: relative; }
+html[data-mobile-chat="true"]:has(#chat-options[data-open="true"]) #chat-options-backdrop {
+  display: block; position: absolute; inset: 0; z-index: 3; border: 0; padding: 0; margin: 0;
+  background: rgb(0 0 0 / 24%); cursor: pointer; touch-action: manipulation;
+}
+html[data-mobile-chat="true"]:has(#chat-options[data-open="true"]) .composer-wrap { z-index: 4; }
+html[data-mobile-chat="true"] #chat-options[data-open="true"] {
+  background: var(--st-surface); border-color: var(--st-ink-muted); border-radius: 16px;
+  box-shadow: var(--st-sh-pop);
+}
+html[data-theme="dark"][data-mobile-chat="true"] #chat-options[data-open="true"] { background: var(--st-surface-2); }
+html[data-theme="dark"][data-mobile-chat="true"]:has(#chat-options[data-open="true"]) #chat-options-backdrop { background: rgb(0 0 0 / 38%); }
+html[data-mobile-chat="true"] #chat-options-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--st-line); }
+#chat-options-title { font-size: var(--st-fs-base); margin: 0; }
+html[data-mobile-chat="true"] #chat-options-close { min-width: 44px; min-height: 44px; }
+html[data-mobile-chat="true"] #composer-options-toggle[aria-expanded="true"] { background: var(--st-accent-tint); border-color: var(--st-accent-text); color: var(--st-accent-text); }

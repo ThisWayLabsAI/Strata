@@ -52,6 +52,7 @@
         </div>
       </div>
     </div>
+    <div id="chat-options-backdrop" aria-hidden="true"></div>
     <div class="composer-wrap">
       <div class="chat-jump" id="chat-jump" hidden>
         <button type="button" class="st-btn st-btn--secondary" id="jump-latest">Jump to latest</button>
@@ -59,6 +60,7 @@
       <form class="st-composer" id="composer">
         <button type="button" id="composer-expand" class="st-btn" aria-label="Expand composer" aria-controls="input">Ask a follow-up…</button>
         <div id="chat-options">
+        <div id="chat-options-heading"><h2 id="chat-options-title">Chat options</h2><button type="button" id="chat-options-close" class="st-btn st-btn--icon" aria-label="Close chat options" title="Close chat options"><svg class="st-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
         <div id="chat-model-row" hidden>
           <label>Model <select id="chat-model" class="st-input" aria-describedby="chat-model-status"></select></label>
           <span id="chat-model-status" class="muted small" role="status"></span>
