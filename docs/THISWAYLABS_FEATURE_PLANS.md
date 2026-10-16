@@ -2,7 +2,7 @@
 
 ## Mobile reading space and control spacing
 
-Implemented on `fix/mobile-composer` from `8e8eaa62`, after the user approved advice on four mobile screenshots. Acceptance: one-row reading state, explicit expansion/collapse preserving drafts, collapse after Send, no auto-collapse during typing, Stop replacing Send, model/image controls behind Options, separated dialog/Choose image buttons and retained 44px targets. Six-size CPU/browser checks and saved-thread/image/private regressions passed; see [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md). Actual Android testing follows deployment.
+Application `8cfc842f` is deployed locally, implemented on `fix/mobile-composer` from `8e8eaa62` after the user approved advice on four mobile screenshots. Acceptance: one-row reading state, explicit expansion/collapse preserving drafts, collapse after Send, no auto-collapse during typing, Stop replacing Send, model/image controls behind Options, separated dialog/Choose image buttons and retained 44px targets. Six-size CPU/browser checks, saved-thread/image/private regressions and live deployment verification passed; see [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md). Actual Android testing remains with the user.
 
 ## Private chat follow-up
 
