@@ -15,5 +15,5 @@
   if (JSON.stringify(apiMessages()).includes("data:image/") || localStorage.getItem("strata.chat").includes("data:image/")) throw new Error("Source pixels entered text history");
   return {passed: true, job: image.id, operation: recipe.operation, seed: recipe.seed, size: recipe.size,
     references: recipe.references, saved: image.persisted, bytes: record.blob.size,
-    inputsAfterRefresh: chatReferences.length, composerVisible: $("send-btn").getBoundingClientRect().bottom <= innerHeight + 1};
+    selectedInputs: chatReferences.length, composerVisible: $("send-btn").getBoundingClientRect().bottom <= innerHeight + 1};
 })();

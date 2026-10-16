@@ -1,6 +1,6 @@
 # Thiswaylabs feature plans
 
-Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, PNG recipes/templates, reference editing in Images, and opt-in text-to-image chat tools are implemented; see [the current handoff](THISWAYLABS_HANDOFF.md) and [chat image contract and verification](CHAT_IMAGES.md). [Chat reference editing](CHAT_IMAGE_EDITING.md) is implemented in development on `feature/chat-image-editing`, based on `919e9866`, with mock/fixture checks; coordinated hardware validation and rollout remain pending. Model switching remains planned.
+Status: implementation plans and acceptance criteria, 2026-10-15. Mobile chat, PNG recipes/templates, reference editing in Images, and opt-in chat image generation/editing are deployed locally; see [the current handoff](THISWAYLABS_HANDOFF.md) and [chat reference contract and verification](CHAT_IMAGE_EDITING.md). Chat reference implementation `fcb7c79c`, based on `919e9866`, passed mock/fixture and coordinated Original/SC117 hardware checks, and was deployed with release `a5d0c6ae`. Model switching remains planned.
 
 The user confirmed that enabled chat generation worked and accepted moving on while continuing testing. The text-to-image increment is accepted within its documented limits. [Implementation decisions](THISWAYLABS_DECISIONS.md) record the boundaries and release evidence. Existing acceptance lists below retain the original goals; actual coverage and outstanding device/backend checks are recorded in the handoff, not implied by acceptance of the increment.
 
@@ -12,7 +12,7 @@ Intervening user-requested increment: optional region marking, camera/framing pr
 2. `feature/chat-images`: implemented text-to-image generation directly from chat, persistent inline results, and GPU handoff. Reference editing in chat follows separately.
 3. `feature/model-switcher`: choose an installed chat model per conversation, with matching API behavior and serialized GPU transitions.
 
-At the user's later request, reference editing moved ahead of chat-tool integration and is now implemented in Images. Attaching a photo to chat remains vision only; the new chat tool accepts text prompts and cannot use attached photos as generation references. The shared backend supports reference generation/editing in Images; see [implementation and verification](IMAGE_RECIPES_AND_REFERENCES.md).
+At the user's later request, reference editing first moved ahead of chat-tool integration in Images. Ordinary attachments remain vision input; explicitly selecting an attachment or saved result now also supports reference generation/editing in chat. Both use the shared backend. See [Images implementation](IMAGE_RECIPES_AND_REFERENCES.md) and [chat implementation](CHAT_IMAGE_EDITING.md).
 
 The small API Monitor navigation change accompanies these plans on `chore/feature-plans-api-monitor`. It adds a link in the Monitor tab to `/api-monitor`, opening a new tab. The relative origin preserves the development, localhost, and private proxy addresses. The existing Monitor dashboard remains available. The link explains that API monitoring must already be enabled; it does not enable request recording or change configuration.
 
@@ -57,7 +57,7 @@ Before release, record the exact commit, checks, device/browser versions, hardwa
 
 ### Next increment: reference-aware generation and editing in chat
 
-Text-to-image generation is accepted; the installed Images backend already supports up to three ordered references and editing with its verified projector. These assets and contracts are reused by the development implementation on `feature/chat-image-editing`. The criteria below still govern release; mock/fixture evidence does not establish deployed chat editing or hardware/model quality. See [the implementation contract](CHAT_IMAGE_EDITING.md).
+The installed Images backend supports up to three ordered references and editing with its verified projector. These assets and contracts are reused by the locally deployed chat implementation. The criteria below remain the original release goals; the handoff records actual native/fixture coverage and remaining limitations rather than implying broad identity, camera or device validation. See [the implementation contract](CHAT_IMAGE_EDITING.md).
 
 1. Make Generate/Edit and selected references explicit. An attachment for analysis must not silently become an edit source. Allow a current attachment or a chosen generated result to become a reference, with visible source/identity/style/composition roles and order. Resolve references only from the request's authorized inputs; preserve source provenance without accepting model-supplied paths or fetching arbitrary model-supplied URLs.
 2. Add a distinct edit tool beside text generation. Validate a bounded selection of reference IDs using the existing reference normalization, count, size, role and capability checks. A missing/stale reference or unavailable edit capability is an actionable error, never a silent text-to-image fallback. Tool descriptions must distinguish new images, referenced generation, edits and analysis.
