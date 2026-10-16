@@ -573,7 +573,7 @@ async function loadChatModels() {
   const request = ++modelStatusRequest;
   try {
     const stateResponse = await fetch("v1/model-selection", {headers: headers()});
-    if (!stateResponse.ok) { if (request === modelStatusRequest) $("chat-model-row").hidden = true; return; }
+    if (!stateResponse.ok) { if (request === modelStatusRequest) { $("chat-model-row").hidden = true; $("chat-model-settings").hidden = true; } return; }
     const state = await stateResponse.json();
     const listing = await fetch("v1/models", {headers: headers()});
     if (!listing.ok) throw new Error("Model list unavailable");
@@ -593,6 +593,7 @@ async function loadChatModels() {
     if (select.value !== requested) select.value = requested;
     select.disabled = !!busy;
     $("chat-model-row").hidden = false;
+    $("chat-model-settings").hidden = false;
     $("chat-model-status").textContent = `Requested: ${requested}. Active: ${modelSelection.active_model} (${modelSelection.loaded ? "loaded" : "unloaded"}). Selection applies on Send.`;
   } catch (e) { if (request === modelStatusRequest) $("chat-model-status").textContent = "Model status unavailable. Retry by refreshing before sending."; }
 }
@@ -600,6 +601,12 @@ $("chat-model").onchange = () => {
   conversationModel = $("chat-model").value;
   store.set("chatModel", conversationModel);
   loadChatModels();
+};
+$("chat-model-settings").onclick = () => {
+  const open = $("chat-model-settings").getAttribute("aria-expanded") !== "true";
+  $("chat-model-settings").setAttribute("aria-expanded", String(open));
+  $("chat-model-row").dataset.open = String(open);
+  if (open) { $("chat-image-settings").setAttribute("aria-expanded", "false"); renderChatReferences(); }
 };
 setInterval(() => { if (modelSelection && tab === "chat" && !document.hidden) loadChatModels(); }, 3000);
 let attachments = [];                 // {name, url}
@@ -940,6 +947,7 @@ function assistantMessages(m) {
 
 function setBusy(on) {
   $("chat-model").disabled = on;
+  $("chat-model-settings").disabled = on;
   $("stop-btn").hidden = !on;
   $("send-btn").disabled = on || attachmentReads > 0;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
@@ -974,6 +982,8 @@ async function send() {
   renderChat();
   const el = $("chat").lastElementChild;
   const controller = new AbortController();
+  $("chat-model-row").dataset.open = "false";
+  $("chat-model-settings").setAttribute("aria-expanded", "false");
   busy = {controller, msg: m};
   setBusy(true);
 

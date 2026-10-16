@@ -9,6 +9,8 @@
   };
   await loadChatModels();
   check(!$("chat-model-row").hidden, "Opt-in registry exposes selector");
+  if (document.documentElement.dataset.chatCompact === "true") $("chat-model-settings").click();
+  check(document.documentElement.dataset.chatCompact !== "true" || $("chat-model-settings").getBoundingClientRect().height >= 44, "Compact model settings has a touch-sized control");
   const select = value => { $("chat-model").value = value; $("chat-model").dispatchEvent(new Event("change")); };
   select("sc117");
   await loadChatModels();
@@ -17,8 +19,11 @@
   const before = await (await fetch("v1/model-selection")).json();
   check(before.active_model === modelSelection.active_model, "Selection alone does not run inference");
   $("input").value = "hello";
+  $("chat-image-row").hidden = false;
   const sent = send();
   check($("chat-model").disabled, "Selector disabled while sending");
+  const stopBox = $("stop-btn").getBoundingClientRect();
+  check(stopBox.top >= 0 && stopBox.bottom <= innerHeight, "Stop fits with model selection and image opt-in during streaming");
   await sent;
   await loadChatModels();
   await waitFor(() => modelSelection.active_model === "sc117");
@@ -61,6 +66,7 @@
     check($("chat-model").value === "sc117" && $("chat-model").selectedOptions[0].text.includes("unavailable"), "Stale selection remains visible without substitution");
   } finally { window.fetch = originalFetch; }
   await loadChatModels();
+  if (document.documentElement.dataset.chatCompact === "true" && $("chat-model-settings").getAttribute("aria-expanded") !== "true") $("chat-model-settings").click();
   const box = $("chat-model").getBoundingClientRect();
   check(box.left >= 0 && box.right <= innerWidth && box.height >= 44, "Selector fits viewport with touch-sized height");
   check(document.documentElement.scrollWidth <= innerWidth, "No page-wide horizontal overflow");
@@ -71,6 +77,9 @@
   check(document.documentElement.scrollWidth <= innerWidth, "Installed model IDs fit viewport");
   const sendBox = $("send-btn").getBoundingClientRect();
   check(sendBox.bottom <= innerHeight && sendBox.top >= 0, "Send remains visible with full installed IDs");
+  $("chat-image-row").hidden = false;
+  const combined = $("send-btn").getBoundingClientRect();
+  check(combined.bottom <= innerHeight && combined.top >= 0, "Send fits with model settings and image opt-in together");
   name.textContent = oldName; $("chat-model-status").textContent = oldStatus;
   const optionNode = $("chat-model").options[0];
   await loadChatModels();
