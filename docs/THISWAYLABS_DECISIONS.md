@@ -2,6 +2,12 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Model switching: development implementation
+
+Implement an optional administrator-owned registry of existing native packs, preserving startup configs and assets. Public IDs select chat identity; startup aliases remain bound to the startup model. Registry mode conservatively admits one whole POST operation at a time and returns `409 model_busy` for concurrent work, including requests for the same model. Holding admission across preparation, tools and image restoration prevents wrong-model execution when the GPU FIFO is temporarily released. Batch/replica profiles and manual slot snapshots are refused in this first increment.
+
+Keep selection with the current browser conversation; reset on New, restore on Undo, persist a concrete default ID on first Send, and retain unavailable selections visibly. Save the actual response identity separately. Validate assets before stopping the working model, rebuild from full history, reject context overflow without truncation, and restore the previous engine on load failure where safe. Failure state must distinguish selected configuration from residency. Use a separate private registry config for later native testing; the original four configs and live service stay untouched during mock development. [MODEL_SWITCHING.md](MODEL_SWITCHING.md) defines the contract. Mock/fixture success does not authorize or establish native deployment readiness.
+
 ## Deployed locally: explicit chat reference editing
 
 Application `fcb7c79c`, based on `919e9866`, was validated and deployed with release `a5d0c6ae`. The [chat reference contract](CHAT_IMAGE_EDITING.md) implements request-owned inputs, explicit operation and selected roles. Attachments alone remain analysis; saved output selection is explicit. The model receives bounded reference IDs/roles and must return the exact ordered selection. Invalid or missing references fail without generation fallback. Existing one-attempt orchestration, GPU ownership, output storage and cancellation remain shared. Final numbered role guidance and actual settings enter recipes; source bytes and private input names do not. Temporary input references require reselection after refresh. This does not add brush compositing to chat or improve camera compliance.
