@@ -5531,6 +5531,7 @@ def make_handler(svc: Service):
                         if not self._own_page("the chat model can be selected"):
                             return
                         svc.model_registry.switch(req.get("model"))
+                        svc.load()
                         self._json(200, svc.model_registry.state())
                         return
                     if path in ("/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", "/v1/responses", "/v1/load"):

@@ -167,6 +167,13 @@ class Switching(unittest.TestCase):
         self.assertEqual({item["id"] for item in body["data"]}, {"original", "sc117", "legacy"})
         self.assertNotIn("tokenizer", json.dumps(body))
 
+    def test_selecting_current_unloaded_model_loads_it(self):
+        self.svc.engine.unload()
+        code, body = self.request("/v1/model-selection", {"model":"original"})
+        self.assertEqual(code, 200, body)
+        self.assertEqual(body["active_model"], "original")
+        self.assertTrue(body["loaded"])
+
     def test_authentication_and_cross_origin_selection(self):
         self.svc.api_key = "fixture-secret"
         self.assertEqual(self.chat()[0], 401)
