@@ -1,5 +1,7 @@
 # Mobile composer and control spacing
 
+Follow-up: [Mobile keyboard gap](MOBILE_KEYBOARD_GAP.md) adjusts viewport settling and bottom padding when typing, after the user's Android/Brave screenshot showed extra space above the keyboard.
+
 Application `8cfc842f`, implemented on `fix/mobile-composer` from `8e8eaa62`, is deployed locally in `C:\AI\Strata` in response to four Android/Brave screenshots. Refresh the app to test. Browser fixtures validate layout; actual device testing remains with the user.
 
 On mobile layout the composer starts as one reading row: **Ask anything…**, **Ask a follow-up…**, or **Continue draft…**. Tap it to expand and focus the input. The chevron collapses it without clearing the draft. Sending a valid request collapses the composer and dismisses input focus so the response has more room. Stop occupies the same 44px action position as Send; the two are never displayed together. The compact row retains Stop during generation. Expanding to draft the next question while the reply streams keeps the input expanded at completion. Validation failures preserve the current input state.

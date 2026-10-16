@@ -265,8 +265,9 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
   html[data-mobile-chat="true"] .st-btn--send,
   html[data-mobile-chat="true"] #stop-btn { min-width: 44px; min-height: 44px; }
   html[data-mobile-chat="true"] .composer-wrap {
-    padding: 0 max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    padding: 0 max(8px, env(safe-area-inset-right, 0px)) max(8px, var(--chat-bottom-safe-area, env(safe-area-inset-bottom, 0px))) max(8px, env(safe-area-inset-left, 0px));
   }
+  html[data-mobile-chat="true"][data-chat-keyboard="true"] .composer-wrap { padding-bottom: 8px; }
   html[data-mobile-chat="true"] .st-composer { padding: 6px; gap: 2px; }
   html[data-mobile-chat="true"] .st-composer textarea { font-size: 16px; max-height: none; }
   html[data-mobile-chat="true"] .st-composer__bar { gap: 0; flex-wrap: wrap; }

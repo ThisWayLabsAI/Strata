@@ -1045,26 +1045,52 @@ if (typeof ResizeObserver !== "undefined") {
   chatResize.observe($("chat"));
   chatResize.observe($("chat-scroll"));
 }
+let chatRestHeight = 0;
+let chatFitWidth = 0;
+let chatViewportFrame = 0, chatViewportTimers = [];
 function fitChatViewport() {
   const root = document.documentElement;
   const vv = window.visualViewport;
+  let viewportChanged = false;
   if (mobileChat) {
     // Let the browser handle pinch zoom. Do not resize the app to a magnified viewport.
     if (vv && Math.abs(vv.scale - 1) > 0.01) return;
-    root.style.setProperty("--chat-viewport-height", `${vv ? vv.height : innerHeight}px`);
-    root.style.setProperty("--chat-viewport-top", `${vv ? vv.offsetTop : 0}px`);
+    const height = vv ? vv.height : innerHeight;
+    const width = vv ? vv.width : innerWidth;
+    const top = vv ? vv.offsetTop : 0;
+    const editing = document.activeElement?.matches('textarea, input:not([type="checkbox"]):not([type="radio"]), [contenteditable="true"]');
+    if (!editing) chatRestHeight = height;
+    const keyboard = String(!!editing && chatRestHeight - height > 120);
+    viewportChanged = root.style.getPropertyValue("--chat-viewport-height") !== `${height}px` ||
+      root.style.getPropertyValue("--chat-viewport-top") !== `${top}px` || chatFitWidth !== width || root.dataset.chatKeyboard !== keyboard;
+    chatFitWidth = width;
+    root.dataset.chatKeyboard = keyboard;
+    root.style.setProperty("--chat-viewport-height", `${height}px`);
+    root.style.setProperty("--chat-viewport-top", `${top}px`);
     root.dataset.chatCompact = String((vv ? vv.height : innerHeight) < 420);
   } else {
     root.style.removeProperty("--chat-viewport-height");
     root.style.removeProperty("--chat-viewport-top");
     delete root.dataset.chatCompact;
+    delete root.dataset.chatKeyboard;
+    chatRestHeight = 0;
+    chatFitWidth = 0;
   }
-  if (mobileChat) { autosize(); scrollDown(); }
+  // A settling check with unchanged geometry must not disturb a reader's scroll position.
+  if (mobileChat && viewportChanged) { autosize(); scrollDown(); }
   if (mobileChat && tab === "images") requestAnimationFrame(keepImageInputVisible);
+}
+function settleChatViewport() {
+  fitChatViewport();
+  cancelAnimationFrame(chatViewportFrame);
+  chatViewportFrame = requestAnimationFrame(fitChatViewport);
+  chatViewportTimers.forEach(clearTimeout);
+  // Android browser controls and keyboard animations can settle after the first resize.
+  chatViewportTimers = [100, 300].map(delay => setTimeout(fitChatViewport, delay));
 }
 function applyChatLayout() {
   const viewport = document.querySelector('meta[name="viewport"]');
-  const viewportContent = chatLayout === "desktop" ? "width=1100, viewport-fit=cover" : "width=device-width, initial-scale=1, viewport-fit=cover";
+  const viewportContent = chatLayout === "desktop" ? "width=1100, viewport-fit=cover" : "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content";
   if (viewport.content !== viewportContent) viewport.content = viewportContent;
   mobileChat = chatLayout === "mobile" || (chatLayout === "auto" && mobileViewport.matches);
   document.documentElement.dataset.mobileChat = String(mobileChat);
@@ -1076,11 +1102,13 @@ function applyChatLayout() {
   autosize();
 }
 $("chat-layout").onchange = () => { chatLayout = $("chat-layout").value; store.set("chatLayout", chatLayout); applyChatLayout(); };
-window.addEventListener("resize", fitChatViewport);
+window.addEventListener("resize", settleChatViewport);
+document.addEventListener("focusin", settleChatViewport);
+document.addEventListener("focusout", settleChatViewport);
 mobileViewport.addEventListener("change", applyChatLayout);
 if (window.visualViewport) {
-  visualViewport.addEventListener("resize", fitChatViewport);
-  visualViewport.addEventListener("scroll", fitChatViewport);
+  visualViewport.addEventListener("resize", settleChatViewport);
+  visualViewport.addEventListener("scroll", settleChatViewport);
 }
 
 $("chat").addEventListener("click", (e) => {

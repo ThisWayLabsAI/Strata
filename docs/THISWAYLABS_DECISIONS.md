@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Keyboard gap: resize content and avoid a second bottom inset
+
+Respond to the user's Android/Brave screenshot by requesting content resizing for the keyboard and rechecking transitional visual-viewport measurements. While text focus and a large height reduction indicate a keyboard, retain only an 8px composer bottom gap; restore normal safe-area spacing after dismissal. Skip work for unchanged geometry to prevent delayed checks from disturbing older reading positions. Keep the VisualViewport fallback and desktop override. Document the detection heuristic and simulated-test limits rather than claiming physical-device reproduction. See [MOBILE_KEYBOARD_GAP.md](MOBILE_KEYBOARD_GAP.md).
+
 ## Mobile composer: prioritize reading space
 
 At the user's request, collapse the mobile composer into one reading row after Send and expose Model/image settings through Options. Keep Stop visible in the same action position as Send. Explicit collapse preserves drafts, and typing after reopening prevents completion from collapsing the editor again. New/Export remain accessible in Options to keep the mobile toolbar within small widths. Separate/stack dialog and image controls with consistent gaps. This changes mobile UI defaults as explicitly requested; desktop remains expanded. [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md) records measurements, regression coverage and device-test limits.
