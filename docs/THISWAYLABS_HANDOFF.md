@@ -2,7 +2,9 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
-## Options visual separation follow-up
+## Current release: Options visual separation deployed
+
+Application `65bddf1a` is deployed locally in `C:\AI\Strata`. The compatible static-file deployment kept the live server running with the same listener PID. Health, all three served asset hashes, four preserved config hashes and Git connectivity passed. An isolated authenticated mobile browser verified the installed model choices, close and outside-tap dismissal, and preserved draft; browser errors were empty. Screenshot: `Strata-data\logs\mobile-options-surface-20261015\live-dark-390.png`. The browser was closed and temporary authentication removed. Rollback `rollback/pre-options-surface-20261015` retains `850b2ac4`. Bundle and report: `Strata-data\backups\options-surface-deploy-20261015-1`. Keys, models, configs, native engines, controls and scheduled task settings are unchanged. GitHub publication remains pending authentication; camera changes remain experimental.
 
 The user confirmed the keyboard gap is resolved, then approved a stronger Options surface after an Android screenshot showed it blending into the response. `fix/mobile-options-surface` from `850b2ac4` adds a raised theme-aware surface, stronger border/shadow, **Chat options** heading, close button, response dimming/outside-tap dismissal and active-button accent. Send/Stop and the composer remain above the dimming layer. Desktop stays inline. CPU fixture tests passed: 626 assertions across six sizes (surface light/dark hit-tests, composer, mobile scrolling/keyboard, model selection), plus 26 thread checks. Dark/light screenshots inspected; browser errors empty. See [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md) and `Strata-data\logs\mobile-options-surface-20261015`. Deployment can use the established compatible static-file path without restarting live; no server, engine, config, model, key, package or control changes are required.
 
