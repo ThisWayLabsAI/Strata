@@ -68,6 +68,7 @@ from serve.structured import StructuredOutputError, prepare_format, validated_js
 from serve import responses as responses_api  # noqa: E402
 from serve.responses import ResponsesError, error_body as responses_error_body  # noqa: E402
 from serve import images as images_api  # noqa: E402
+from serve.image_references import capabilities as image_capabilities  # noqa: E402
 
 IM_END = "<|im_end|>"
 IMAGE_PAD = "<|image_pad|>"
@@ -5373,6 +5374,7 @@ def make_handler(svc: Service):
                                  "images": svc.vision is not None, "api_key": bool(svc.api_key),
                                  "image_generation": svc.images is not None,
                                  "chat_image_generation": svc.images is not None and not svc.images.missing(),
+                                 "chat_image_editing": svc.images is not None and not svc.images.missing() and image_capabilities(svc.images.cfg)["editing"],
                                  "loaded": svc.loaded(), "service": "strata"})
             elif path.startswith("/v1/images/files/"):
                 # response_format url: the name (32 random hex digits) is the access, as an OpenAI image URL is
@@ -5853,6 +5855,10 @@ def make_handler(svc: Service):
             req = svc.with_shared(req, "openai")
             if "strata_images" in req and not isinstance(req["strata_images"], bool):
                 raise ValueError("strata_images must be true or false")
+            image_inputs = ("generate", [])
+            if "strata_image_request" in req:
+                from serve.chat_images import request_inputs
+                image_inputs = request_inputs(req, svc.images.cfg if svc.images else {})
             bias_api.normalize(req.get("logit_bias"), len(getattr(svc.tok, "tokens", ())) or None)
             messages, tools, kw = openai_to_messages(req)
             self._no_local_images(messages)
@@ -5883,11 +5889,14 @@ def make_handler(svc: Service):
                 tools = (tools or []) + extra or None
             image_hub = None
             if use_images:
-                from serve.chat_images import ImageToolHub, NAME, TOOL
-                if NAME not in own:                         # client-managed tools always retain ownership
-                    image_hub = ImageToolHub(svc, svc.mcp if use_mcp else None)
-                    tools = (tools or []) + [TOOL]
-                    extra = (extra if use_mcp else []) + [TOOL]
+                from serve.chat_images import ImageToolHub, NAME, EDIT_NAME
+                operation, references = image_inputs
+                name = EDIT_NAME if operation == "edit" else NAME
+                if name not in own:                         # client-managed tools always retain ownership
+                    image_hub = ImageToolHub(svc, svc.mcp if use_mcp else None, operation=operation, references=references)
+                    tool = image_hub.tool()
+                    tools = (tools or []) + [tool]
+                    extra = (extra if use_mcp else []) + [tool]
             if force and (use_mcp or image_hub):
                 raise ValueError("a forced tool_choice with MCP tools is not supported")
             svc.reasoning_budget(req)                         # a bad value is a 400 before anything is sent

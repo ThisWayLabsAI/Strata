@@ -54,7 +54,13 @@
       </div>
       <form class="st-composer" id="composer">
         <div class="attachments" id="attachments" hidden></div>
-        <label class="chat-image-opt-in" id="chat-image-row" hidden><input type="checkbox" id="chat-image-enabled">Create images in chat <span class="muted small">Text prompts only; reference editing is in Images.</span></label>
+        <div class="chat-image-opt-in" id="chat-image-row" hidden><label><input type="checkbox" id="chat-image-enabled">Create images in chat</label><button type="button" id="chat-image-settings" class="st-btn st-btn--secondary" aria-controls="chat-image-inputs" aria-expanded="false" hidden>Image settings</button><span class="muted small">Attachments stay for analysis unless selected as references.</span></div>
+        <div id="chat-image-inputs" class="chat-image-inputs" hidden>
+          <label>Image operation <select id="chat-image-operation"><option value="generate">Generate</option><option value="edit">Edit selected source</option></select></label>
+          <div id="chat-image-references"></div>
+          <p id="chat-image-guidance" class="muted small" role="status"></p>
+          <p class="muted small">Reference inputs are temporary; reattach or select a saved output after refresh. Chat edits affect the whole image. Use Images for brush selection and local pixel protection. Camera changes remain experimental.</p>
+        </div>
         <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message"></textarea>
         <div class="st-composer__bar">
           <button type="button" class="st-btn st-btn--icon" id="attach-btn" title="Attach a text file (or drop it here)" aria-label="Attach a file">

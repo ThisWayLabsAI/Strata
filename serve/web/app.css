@@ -295,6 +295,17 @@ html[data-mobile-chat="true"] .composer-wrap { position: relative; }
 
 .chat-image-opt-in:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 44px; margin: 0 8px 6px; font-size: var(--st-fs-sm); cursor: pointer; }
 .chat-image-opt-in input { width: 18px; height: 18px; accent-color: var(--st-accent); }
+.st-composer { position: relative; }
+.chat-image-opt-in label { display: flex; align-items: center; gap: 6px; min-height: 44px; }
+.chat-image-opt-in #chat-image-settings { min-height: 44px; padding: 4px 8px; }
+.chat-image-inputs { position: absolute; bottom: 100%; left: 6px; right: 6px; z-index: 5; padding: 10px; border: 1px solid var(--st-line); border-radius: 8px; background: var(--st-bg); max-height: min(220px, calc(var(--chat-viewport-height, 100dvh) - 180px)); overflow: auto; box-shadow: 0 4px 18px #0003; }
+.chat-image-inputs label, .chat-reference { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chat-image-inputs select, .chat-reference button, .chip .chat-reference-pick { min-height: 44px; max-width: 100%; }
+.chat-reference { margin-top: 4px; }
+.chat-reference img { width: 40px; height: 40px; object-fit: contain; }
+.chat-reference span { overflow-wrap: anywhere; min-width: 0; flex: 1 1 calc(100% - 52px); }
+html[data-chat-compact="true"] .chat-image-opt-in .small { display: none; }
+html[data-chat-compact="true"] .chat-image-opt-in { font-size: 12px; gap: 4px; margin-left: 0; margin-right: 0; }
 .chat-image { display: grid; gap: 10px; margin: 12px 0; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .chat-image-preview { display: block; width: auto; height: auto; max-width: 100%; max-height: 560px; object-fit: contain; border-radius: var(--st-r-sm); }
 .chat-image-state { font-weight: var(--st-fw-bold); }

@@ -106,6 +106,7 @@ async function loadHealth() {
     $("chat-empty-sub").textContent = `${health.model} runs on this PC. Nothing leaves it.`;
     $("tab-btn-images").hidden = !health.image_generation;
     $("chat-image-row").hidden = !health.chat_image_generation;
+    renderChatReferences();
     if (location.hash === "#images" && health.image_generation) showTab("images");
   } catch (e) {
     setTimeout(loadHealth, 2000);
@@ -583,7 +584,48 @@ function saveChat() {
 }
 StrataChatImages.recover(messages);
 $("chat-image-enabled").checked = store.get("chatImageTools", false) === true;
-$("chat-image-enabled").onchange = () => store.set("chatImageTools", $("chat-image-enabled").checked);
+$("chat-image-enabled").onchange = () => { store.set("chatImageTools", $("chat-image-enabled").checked); renderChatReferences(); renderAttachments(); };
+const chatReferences = []; // Transient selected bytes; never written to transcript/localStorage.
+function selectChatReference(data, name) {
+  if (busy || attachmentReads) throw new Error("Wait for the current request or file reading to finish.");
+  if (!health.chat_image_editing) throw new Error("Chat references require the updated server. Use Images for now.");
+  if (chatReferences.length >= 3) throw new Error("Use at most three references. Remove one first.");
+  chatReferences.push({id: crypto.randomUUID(), data, name, role: chatReferences.length ? "identity" : "source"});
+  $("chat-image-enabled").checked = true; store.set("chatImageTools", true);
+  $("chat-image-settings").setAttribute("aria-expanded", "true");
+  renderChatReferences(); renderAttachments();
+}
+function renderChatReferences() {
+  const enabled = $("chat-image-enabled").checked && health.chat_image_editing;
+  $("chat-image-settings").hidden = !enabled;
+  $("chat-image-settings").textContent = `${$("chat-image-operation").value === "edit" ? "Edit" : "Generate"} · ${chatReferences.length} refs`;
+  $("chat-image-inputs").hidden = !enabled || $("chat-image-settings").getAttribute("aria-expanded") !== "true";
+  $("chat-image-operation").disabled = !!busy;
+  const box = $("chat-image-references"); box.replaceChildren();
+  chatReferences.forEach((ref, index) => {
+    const row = document.createElement("div"); row.className = "chat-reference";
+    const preview = document.createElement("img"); preview.src = ref.data; preview.alt = `Reference ${index + 1}`; row.append(preview);
+    const label = document.createElement("span"); label.textContent = `${index + 1}. ${ref.name}`; row.append(label);
+    const role = document.createElement("select"); role.setAttribute("aria-label", `Reference ${index + 1} role`);
+    for (const value of ["source", "identity", "style", "composition"]) role.add(new Option(value, value));
+    role.value = ref.role; role.disabled = !!busy; role.onchange = () => { ref.role = role.value; renderChatReferences(); }; row.append(role);
+    for (const [text, action, disabled] of [
+      ["Move earlier", () => { [chatReferences[index - 1], chatReferences[index]] = [ref, chatReferences[index - 1]]; }, index === 0],
+      ["Remove", () => chatReferences.splice(index, 1), false]]) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "st-btn st-btn--secondary";
+      button.textContent = text; button.disabled = !!busy || disabled;
+      button.onclick = () => { action(); renderChatReferences(); renderAttachments(); }; row.append(button);
+    }
+    box.append(row);
+  });
+  $("chat-image-guidance").textContent = chatReferences.length ?
+    "Only these ordered references will be used. Edit needs image 1 as the only source. Inputs are temporary: reselect after refresh; saved outputs remain available." :
+    ($("chat-image-operation").value === "edit" ? "Select a source using an attachment's Use as reference or a saved result's Edit this image." :
+    "Generate from text, or select up to three references. Analysis attachments are separate.");
+}
+$("chat-image-operation").onchange = renderChatReferences;
+$("chat-image-settings").onclick = () => { const button = $("chat-image-settings"); button.setAttribute("aria-expanded", String(button.getAttribute("aria-expanded") !== "true")); renderChatReferences(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("chat-image-inputs").hidden) { $("chat-image-settings").setAttribute("aria-expanded", "false"); renderChatReferences(); $("chat-image-settings").focus(); } });
 function timeStr(t) { return new Date(t).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}); }
 
 function msgEl(m, i) {
@@ -760,9 +802,11 @@ function fitChatViewport() {
     if (vv && Math.abs(vv.scale - 1) > 0.01) return;
     root.style.setProperty("--chat-viewport-height", `${vv ? vv.height : innerHeight}px`);
     root.style.setProperty("--chat-viewport-top", `${vv ? vv.offsetTop : 0}px`);
+    root.dataset.chatCompact = String((vv ? vv.height : innerHeight) < 420);
   } else {
     root.style.removeProperty("--chat-viewport-height");
     root.style.removeProperty("--chat-viewport-top");
+    delete root.dataset.chatCompact;
   }
   if (mobileChat) { autosize(); scrollDown(); }
   if (mobileChat && tab === "images") requestAnimationFrame(keepImageInputVisible);
@@ -788,7 +832,7 @@ if (window.visualViewport) {
 }
 
 $("chat").addEventListener("click", (e) => {
-  if (e.target.closest("[data-chat-image-download], [data-chat-image-template]")) {
+  if (e.target.closest("[data-chat-image-download], [data-chat-image-template], [data-chat-image-reference]")) {
     const message = messages[+e.target.closest(".st-msg").dataset.i];
     StrataChatImages.action(e, message); return;
   }
@@ -819,7 +863,7 @@ function apiMessages() {
   const out = [];
   for (const m of messages) {
     if (m.role === "user") {
-      const imgs = (m.images || []).filter((i) => i.url);
+      const imgs = (m.images || []).filter((i) => i.url && !i.referenceOnly);
       const text = userText(m);
       out.push({role: "user", content: imgs.length ? [{type: "text", text},
         ...imgs.map((i) => ({type: "image_url", image_url: {url: i.url}}))] : text});
@@ -860,14 +904,25 @@ function setBusy(on) {
   $("stop-btn").hidden = !on;
   $("send-btn").disabled = on || attachmentReads > 0;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
+  renderChatReferences(); renderAttachments();
 }
 
 async function send() {
   const text = $("input").value.trim();
   if ((!text && !attachments.length) || busy || attachmentReads) return;
-  messages.push({role: "user", text, images: attachments.filter((a) => a.kind !== "file"),
+  let imageRequest;
+  if (health.chat_image_generation && $("chat-image-enabled").checked && health.chat_image_editing) {
+    const operation = $("chat-image-operation").value;
+    if (operation === "edit" && (!chatReferences.length || chatReferences[0].role !== "source" || chatReferences.slice(1).some(ref => ref.role === "source"))) {
+      toast("error", "Select an edit source", "Image 1 must be the only source; set other roles to identity, style or composition."); return;
+    }
+    imageRequest = {operation, references: chatReferences.map(({id, data, role}) => ({id, data, role}))};
+  }
+  messages.push({role: "user", text, images: attachments.filter((a) => a.kind !== "file").map(a =>
+    ({...a, referenceOnly: !!imageRequest?.references.some(ref => ref.data === a.url)})),
                  files: attachments.filter((a) => a.kind === "file"), time: Date.now()});
   attachments = [];
+  $("chat-image-settings").setAttribute("aria-expanded", "false");
   renderAttachments();
   $("input").value = "";
   autosize();
@@ -891,6 +946,7 @@ async function send() {
   if (projectionLoaded()) body.experimental_speed_projection = !!settings.esp;
   if (settings.mcp !== false && mcpInfo.tools > 0) body.strata_mcp = true;   // this server may run MCP tools for it
   if (health.chat_image_generation && $("chat-image-enabled").checked) body.strata_images = true;
+  if (imageRequest) body.strata_image_request = imageRequest;
   saveChat();
 
   let firstAt = null, thinkStart = null, usage = null, frame = 0;
@@ -987,12 +1043,14 @@ $("new-btn").onclick = () => {
   if (busy) { toast("warn", "Still writing", "Stop the answer first."); return; }
   if (!messages.length) return;
   const backup = messages;
+  const referenceBackup = chatReferences.splice(0);
+  renderChatReferences(); renderAttachments();
   let undone = false;
   const imageIds = backup.flatMap(message => (message.tools || []).map(tool => tool.image?.id).filter(Boolean));
   messages = [];
   saveChat();
   renderChat();
-  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; saveChat(); renderChat(); }});
+  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; chatReferences.splice(0, chatReferences.length, ...referenceBackup); renderChatReferences(); renderAttachments(); saveChat(); renderChat(); }});
   setTimeout(() => { if (!undone) StrataChatImages.remove([...new Set(imageIds)]); }, 6500);
 };
 $("export-btn").onclick = () => {
@@ -1057,6 +1115,13 @@ function renderAttachments() {
     c.className = "chip";
     c.innerHTML = icon(a.kind === "file" ? "attach" : "image", "st-icon st-icon--sm");
     c.append(a.name);
+    if (a.kind !== "file" && a.url && health.chat_image_editing) {
+      const pick = document.createElement("button"); pick.type = "button"; pick.className = "chat-reference-pick st-btn st-btn--secondary";
+      const selected = chatReferences.some(ref => ref.data === a.url);
+      pick.textContent = selected ? "Selected reference" : "Use as reference"; pick.disabled = !!busy || selected;
+      pick.onclick = () => { try { selectChatReference(a.url, a.name); } catch (error) { toast("error", "Reference unavailable", error.message); } };
+      c.append(pick);
+    }
     const x = document.createElement("button");
     x.type = "button"; x.className = "st-btn st-btn--icon"; x.setAttribute("aria-label", "Remove");
     x.innerHTML = icon("trash");

@@ -51,7 +51,8 @@
         `<p class="muted small">${esc(recipe.size)} · seed ${esc(recipe.seed)}</p>` +
         `<p class="chat-image-storage muted small">${image.persisted ? "Saved in this browser" : "Not saved in this browser — download to keep it."}</p>` +
         `<div class="img-template-actions"><button type="button" class="st-btn st-btn--secondary" data-chat-image-download disabled>${image.embedded ? "Download PNG + recipe" : "Download PNG"}</button>` +
-        `<button type="button" class="st-btn st-btn--secondary" data-chat-image-template>Use as template</button></div>` +
+        `<button type="button" class="st-btn st-btn--secondary" data-chat-image-template>Use as template</button>` +
+        `<button type="button" class="st-btn st-btn--secondary" data-chat-image-reference ${health.chat_image_editing ? "" : "hidden"}>Edit this image</button></div>` +
         `<details><summary>Generation recipe</summary><pre class="tool-call__pre">${esc(JSON.stringify(recipe, null, 2))}</pre></details>` : "") +
       (image.error ? `<p class="chat-image-error">${esc(image.error)}</p>` : "") +
       (image.warning ? `<p class="chat-image-error">${esc(image.warning)}</p>` : "") + `</section>`;
@@ -78,7 +79,7 @@
     if (!event || typeof event.id !== "string" || !/^[a-f0-9]{32}$/.test(event.job_id) || !Number.isSafeInteger(event.sequence) || event.sequence < 1) return;
     message.tools ||= [];
     let tool = message.tools.find(tool => tool.id === event.id);
-    if (!tool) { tool = {id:event.id,name:"generate_image",at:message.text.length,rat:message.reasoning.length,state:"running"}; message.tools.push(tool); }
+    if (!tool) { tool = {id:event.id,name:event.name === "edit_image" ? "edit_image" : "generate_image",at:message.text.length,rat:message.reasoning.length,state:"running"}; message.tools.push(tool); }
     if (event.sequence <= (tool.image?.sequence || 0)) return;
     if (event.state === "recovery_failed") {
       if (tool.image?.state === "completed") { tool.image.warning = event.error; tool.image.sequence = event.sequence; saveChat(); }
@@ -124,11 +125,17 @@
     }
   }
   async function action(event, message) {
-    const button = event.target.closest("[data-chat-image-download], [data-chat-image-template]");
+    const button = event.target.closest("[data-chat-image-download], [data-chat-image-template], [data-chat-image-reference]");
     if (!button) return false;
     const id = button.closest("[data-chat-image]").dataset.chatImage, image = message.tools.find(tool => tool.image?.id === id)?.image;
     try {
-      if (button.hasAttribute("data-chat-image-template")) applyImageTemplate(image.recipe);
+      if (button.hasAttribute("data-chat-image-reference")) {
+        const record = await get(id);
+        const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(record.blob); });
+        if (chatReferences.length) throw new Error("Remove current references before choosing a new edit source.");
+        selectChatReference(data, filename(id)); $("chat-image-operation").value = "edit"; renderChatReferences(); $("input").focus();
+      }
+      else if (button.hasAttribute("data-chat-image-template")) applyImageTemplate(image.recipe);
       else {
         const record = await get(id), link = document.createElement("a"); link.href = url(record); link.download = filename(id); link.click();
       }

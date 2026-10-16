@@ -1,0 +1,68 @@
+// Run only against tools/mobile_chat_fixture.py. Replaces fixture chat history.
+(async () => {
+  if (health.model !== "mobile-fixture-no-gpu") throw new Error("Use the isolated fixture");
+  const checks = [], check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
+  const until = async fn => { for (let i = 0; i < 200; i++) { if (fn()) return; await new Promise(r => setTimeout(r, 20)); } throw new Error("Timed out"); };
+  const originalFetch = window.fetch, requests = [];
+  window.fetch = (url, options) => { if (String(url).includes("chat/completions")) requests.push(JSON.parse(options.body)); return originalFetch(url, options); };
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+  const data = "data:image/png;base64," + png;
+  const latest = () => messages.at(-1).tools?.find(tool => tool.image)?.image;
+  try {
+    showTab("chat"); messages = []; attachments = []; chatReferences.splice(0); renderChat();
+    $("chat-image-enabled").checked = false; renderChatReferences();
+    await addChatImage(new File([StrataImage.fromBase64(png)], "analysis.png", {type: "image/png"}));
+    check(chatReferences.length === 0 && !$("chat-image-enabled").checked, "Attaching an image never enables generation or selects an edit source");
+    check(attachments.length === 1 && attachments[0].url.startsWith("data:"), "Analysis attachment retains its original bytes");
+    $("attachments").querySelector(".chat-reference-pick").click();
+    check(chatReferences.length === 1 && chatReferences[0].role === "source", "Attachment selection explicitly chooses reference 1 as source");
+    check($("chat-image-enabled").checked && !$("chat-image-inputs").hidden, "Selecting a reference reveals enabled image controls");
+    $("chat-image-operation").value = "edit"; renderChatReferences();
+    $("input").value = "image"; await send();
+    const edit = requests.at(-1), first = latest(), firstMessage = messages.at(-1);
+    check(edit.strata_image_request.operation === "edit" && edit.strata_image_request.references[0].data === data, "Edit request owns the selected source bytes and explicit operation");
+    check(typeof edit.messages[0].content === "string", "Selected reference pixels do not also enter text/vision history");
+    check(first.state === "completed" && first.recipe.operation === "edit" && firstMessage.tools[0].name === "edit_image", "Distinct edit tool produces an inline completed result");
+    check(first.recipe.references[0].role === "source" && /^[a-f0-9]{64}$/.test(first.recipe.references[0].sha256), "Recipe keeps source role and normalized hash");
+    const stored = await StrataChatImages.get(first.id), recipe = StrataImage.read(new Uint8Array(await stored.blob.arrayBuffer()));
+    check(recipe.operation === "edit" && recipe.references.length === 1, "Downloaded and saved PNG embeds edit provenance");
+    check(!localStorage.getItem("strata.chat").includes(png) && !JSON.stringify(first.recipe).includes("data:"), "Saved transcript and recipe exclude source pixels");
+    const ids = chatReferences.map(ref => ref.id), count = requests.length;
+    applyImageTemplate(first.recipe); showTab("chat");
+    check($("chat-image-operation").value === "edit" && JSON.stringify(chatReferences.map(ref => ref.id)) === JSON.stringify(ids), "Using a result template preserves chat operation and selected references");
+    check(requests.length === count, "Template application never submits an image request");
+    chatReferences.splice(0); renderChatReferences(); attachments = []; renderAttachments();
+    $("input").value = "image"; await send();
+    check(requests.length === count && $("input").value === "image", "Edit without a source is actionable and preserves the draft without sending");
+    await until(() => !!$("chat").querySelector(`[data-chat-image="${first.id}"] [data-chat-image-reference]`));
+    const sourceCard = $("chat").querySelector(`[data-chat-image="${first.id}"]`);
+    sourceCard.querySelector("[data-chat-image-reference]").click();
+    await until(() => chatReferences.length === 1);
+    check($("chat-image-operation").value === "edit" && requests.length === count, "Edit this image explicitly selects a stored output without generating");
+    $("input").value = "image"; await send();
+    const second = latest();
+    check(second.id !== first.id && second.recipe.operation === "edit", "Revising a generated result creates a distinct output");
+    check((await StrataChatImages.get(first.id)).blob.size === stored.blob.size, "Revising preserves the original stored PNG");
+    selectChatReference(data, "style.png"); chatReferences[1].role = "style"; renderChatReferences();
+    $("chat-image-operation").value = "generate";
+    $("input").value = "image"; await send();
+    check(requests.at(-1).strata_image_request.operation === "generate" && latest().recipe.references.map(ref => ref.role).join() === "source,style", "Referenced Generate retains ordered roles and produces a new image");
+    $("chat-image-references").children[1].querySelector("button").click();
+    check(chatReferences[0].role === "style", "Reference ordering is explicitly adjustable");
+    $("chat-image-operation").value = "edit";
+    const beforeBad = requests.length; $("input").value = "image"; await send();
+    check(requests.length === beforeBad, "A style reference in slot 1 cannot silently become an edit source");
+    chatReferences.splice(0); selectChatReference(data, "source.png");
+    $("input").value = "image slow"; const pending = send();
+    await until(() => !!busy && !!latest());
+    check($("chat-image-operation").disabled && [...$("chat-image-references").querySelectorAll("select,button")].every(el => el.disabled), "Operation and selected reference controls freeze during the owned request");
+    $("stop-btn").click(); await pending;
+    check(!busy && latest().state === "cancelled", "Stopping a referenced edit ends the inline job without retry");
+    check(document.documentElement.scrollWidth <= innerWidth + 1, "Reference controls fit the viewport");
+    check($("send-btn").getBoundingClientRect().bottom <= innerHeight + 1, "Composer remains reachable with reference controls");
+    // Leave one persisted output for the reload companion.
+    chatReferences.splice(0); selectChatReference(data, "source.png");
+    $("input").value = "image"; await send(); saveChat();
+  } finally { window.fetch = originalFetch; }
+  return {passed: checks.length, checks};
+})();

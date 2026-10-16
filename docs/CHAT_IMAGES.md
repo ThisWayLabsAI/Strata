@@ -2,6 +2,8 @@
 
 Thiswaylabs fork, 2026-10-15. Chat can generate one image from text per request using the same image backend as Images. Reference editing stays in Images for this increment; attaching a photo to chat remains vision input, not an image-edit reference.
 
+Development follow-up: [explicit reference editing in chat](CHAT_IMAGE_EDITING.md) extends this contract on `feature/chat-image-editing` from stable/live `919e9866`. It is not deployed until coordinated hardware validation and rollout; the live text-only tool described here remains unchanged.
+
 Deployment: application commit `996c3cbf503817d9943614555cff61e1def7fb79` is live locally. The user confirmed generation with the checkbox enabled and accepted moving on while continuing testing. See [implementation decisions and follow-ups](THISWAYLABS_DECISIONS.md).
 
 ## Use it

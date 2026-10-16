@@ -2,6 +2,12 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Implemented in development: explicit chat reference editing
+
+Continue from stable/live `919e9866` on `feature/chat-image-editing`. The [chat reference contract](CHAT_IMAGE_EDITING.md) implements the planned request-owned inputs, explicit operation and selected roles. Attachments alone remain analysis; saved output selection is explicit. The model receives bounded reference IDs/roles and must return the exact ordered selection. Invalid or missing references fail without generation fallback. Existing one-attempt orchestration, GPU ownership, output storage and cancellation remain shared. Final numbered role guidance and actual settings enter recipes; source bytes and private input names do not. Temporary input references require reselection after refresh. This does not add brush compositing to chat or improve camera compliance.
+
+Mocks and Chromium fixtures precede coordinated hardware tests. Keep live Images available while the user tests; no production stop/restart or backend rollout has occurred for this increment. Hardware output quality, both models and safe recovery must be verified before local deployment. No keys, configs, packages, installed models or controls change. Model switching remains next after this release gate.
+
 ## Image submission feedback
 
 Images validates only the request's prompt, sampling fields and edit prerequisites. Unused URL/import/template fields must not prevent native button submission. Keep the written prompt required, including when presets are selected, and explain this requirement. Missing edit sources/support and file-reading busy states explain disabled buttons in the footer. Retain errors beside the actions, reveal/focus invalid sampling fields, preserve draft/references, and never replay a failed request automatically. Browser regressions must exercise button clicks, since calling `onsubmit` directly bypasses native constraint validation. See the handoff for measured checks and deployment baseline.
