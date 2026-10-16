@@ -4,6 +4,8 @@ Recorded 2026-10-15. This is the decision record for the local fork; use [the ha
 
 ## Keyboard gap: resize content and avoid a second bottom inset
 
+Deployment of application `ba9fb2a1` used a verified local fast-forward of browser files while live remained running, after Windows canceled the planned stop. The runtime diff contains only backward-compatible HTML/CSS/JS, and the server's static handlers read files on each request. This avoided retrying the denied privileged action and preserved the process/GPU state. Exact served hashes, unchanged PID/config hashes and health verified the result. The existing stop/zero-worker/restart gate still applies to backend, native, configuration or dependency changes; no exception for those is implied.
+
 Respond to the user's Android/Brave screenshot by requesting content resizing for the keyboard and rechecking transitional visual-viewport measurements. While text focus and a large height reduction indicate a keyboard, retain only an 8px composer bottom gap; restore normal safe-area spacing after dismissal. Skip work for unchanged geometry to prevent delayed checks from disturbing older reading positions. Keep the VisualViewport fallback and desktop override. Document the detection heuristic and simulated-test limits rather than claiming physical-device reproduction. See [MOBILE_KEYBOARD_GAP.md](MOBILE_KEYBOARD_GAP.md).
 
 ## Mobile composer: prioritize reading space
