@@ -330,3 +330,8 @@ html[data-chat-compact="true"] .chat-image-opt-in { font-size: 12px; gap: 4px; m
 #img-region-controls:disabled #img-region-canvas { pointer-events: none; opacity: .65; }
 #img-effective-prompt { resize: vertical; max-height: 250px; }
 @media (max-width: 480px) { .img-preset-grid { grid-template-columns: minmax(0, 1fr); } }
+/* The registry's public IDs can be longer than a phone viewport. */
+#chat-model-row { min-width: 0; }
+#chat-model-row label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#chat-model { flex: 1; min-width: 0; max-width: 100%; min-height: 44px; }
+#chat-model-status { display: block; overflow-wrap: anywhere; }

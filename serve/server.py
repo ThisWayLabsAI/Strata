@@ -3103,6 +3103,7 @@ class Service:
         self.tool_call_recovery = False                   # opt-in: tool calls in forms next to the template's
         self.images = None                                # serve/images.py's ImageGen when the config has "images"
         self.restore_after_load = None                    # a session file an image job saved before it unloaded
+        self.model_registry = None                        # opt-in installed models; absent preserves single-model behavior
         self.stop_ids = set(tokenizer.encode(IM_END, parse_special=True) +
                             tokenizer.encode("<|endoftext|>", parse_special=True))
 
@@ -3198,6 +3199,8 @@ class Service:
     def model_for(self, req) -> str:
         """The name to answer with: the request's own when it is the model's name or an alias (#297), else the model's.
         Other names are still served, as before."""
+        if self.model_registry is not None:
+            return self.model
         asked = req.get("model") if isinstance(req, dict) else None
         return asked if isinstance(asked, str) and asked in self.aliases else self.model
 
@@ -5376,6 +5379,9 @@ def make_handler(svc: Service):
                                  "chat_image_generation": svc.images is not None and not svc.images.missing(),
                                  "chat_image_editing": svc.images is not None and not svc.images.missing() and image_capabilities(svc.images.cfg)["editing"],
                                  "loaded": svc.loaded(), "service": "strata"})
+            elif path == "/v1/model-selection" and svc.model_registry is not None:
+                if self._authorized():
+                    self._json(200, svc.model_registry.state())
             elif path.startswith("/v1/images/files/"):
                 # response_format url: the name (32 random hex digits) is the access, as an OpenAI image URL is
                 f = svc.images.file(path[len("/v1/images/files/"):]) if svc.images is not None else None
@@ -5417,6 +5423,10 @@ def make_handler(svc: Service):
                         model["aliases"] = list(svc.aliases)
                     data = [model, *({**model, "id": x, "alias_of": svc.model} for x in svc.aliases)]
                     data = data if loaded else []
+                    if svc.model_registry is not None:
+                        data = svc.model_registry.listing()
+                        data += [{"id": key, "object": "model", "alias_of": value}
+                                 for key, value in svc.model_registry.aliases.items()]
                     if svc.images is not None:            # the image model: POST /v1/images/generations
                         data.append({"id": svc.images.model, "object": "model", "status": {"value": "loaded"},
                                      "architecture": {"input_modalities": ["text"], "output_modalities": ["image"]}})
@@ -5455,7 +5465,19 @@ def make_handler(svc: Service):
 
         def do_POST(self):
             try:
-                self._post()
+                from serve.model_registry import RegistryError
+                try:
+                    if svc.model_registry is None:
+                        self._post()
+                    else:
+                        if not self._authorized():
+                            return
+                        with svc.model_registry.admission():
+                            self._post()
+                except RegistryError as e:
+                    self._json(e.status, {"error": {"type": e.code, "code": e.code, "message": str(e)},
+                                          **svc.model_registry.state()})
+                    self.close_connection = True  # a busy refusal may leave the request body unread
             except BadBody as e:                              # #893: a malformed or oversized chunked body
                 self._json(e.status, {"error": {"type": "invalid_request_error", "message": str(e)}})
 
@@ -5502,6 +5524,17 @@ def make_handler(svc: Service):
                 req = json.loads(self._body() or b"{}")
                 if not isinstance(req, dict):
                     raise ValueError("send a JSON object")
+                if svc.model_registry is not None:
+                    if path.startswith("/slots/"):
+                        raise ValueError("manual session save/restore is unavailable with model switching; resend conversation history")
+                    if path == "/v1/model-selection":
+                        if not self._own_page("the chat model can be selected"):
+                            return
+                        svc.model_registry.switch(req.get("model"))
+                        self._json(200, svc.model_registry.state())
+                        return
+                    if path in ("/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", "/v1/responses", "/v1/load"):
+                        svc.model_registry.switch(req.get("model"))
                 if path.startswith("/v1/responses/"):        # retrieve/delete/cancel/compact: nothing is stored
                     self._json(404, responses_error_body("this server keeps no responses (stateless); send the "
                                                          "whole conversation to POST /v1/responses", code="not_found"))
@@ -5509,7 +5542,8 @@ def make_handler(svc: Service):
                 if path in ("/v1/load", "/v1/unload"):
                     if not self._own_page("the model can be loaded or unloaded"):
                         return
-                    if req.get("model") not in (None, svc.model):
+                    control_model = svc.model_registry.resolve(req.get("model")) if svc.model_registry is not None else req.get("model")
+                    if control_model not in (None, svc.model):
                         self._json(404, {"error": {"message": "model not found"}})
                         return
                     if path == "/v1/unload":
@@ -5671,7 +5705,7 @@ def make_handler(svc: Service):
                      "chat_template_caps": svc.template.caps,
                      "modalities": {"vision": svc.vision is not None}, "models_autoload": hasattr(svc.engine, "restart"),
                      "is_sleeping": not svc.loaded()}
-            if getattr(svc.engine, "model_path", None):
+            if svc.model_registry is None and getattr(svc.engine, "model_path", None):
                 props["model_path"] = svc.engine.model_path
             version = getattr(svc.engine, "info", {}).get("version")
             if version:
@@ -6692,6 +6726,37 @@ def default_model_name(cfg: dict) -> str:
     return cfg.get("model_name") or FAMILY_MODEL_NAMES.get(cfg.get("arch") or "qwen4exp", "qwen3.8-flash-next")
 
 
+def installed_model_service(model, profile):
+    """Prepare a validated replacement entirely on CPU; processes start only after unload."""
+    from serve.model_registry import installed_profile
+    installed_profile(profile)
+    import strata_tokenizer as ST
+    tpath = Path(os.path.abspath(os.path.join(profile.get("cwd") or ".", profile["tokenizer"])))
+    vocab = json.loads((tpath / "vocab.json").read_text(encoding="utf-8"))
+    tokens = [None] * len(vocab)
+    for token, index in vocab.items():
+        tokens[index] = token
+    tok = ST.Tokenizer(tokens, (tpath / "merges.txt").read_text(encoding="utf-8").split("\n"),
+                       json.loads((tpath / "token_type.json").read_text()))
+    env = child_env(profile)
+    base = profile.get("cwd") or "."
+    def absolute(value):
+        return os.path.abspath(os.path.join(base, value))
+    effort = effort_end_args(profile, absolute(profile["exe"]), tok) or []
+    engine = StrataEngine(absolute(profile["exe"]), engine_args(profile) + effort,
+                          cwd=profile.get("cwd"), log=profile.get("log"), env=env, lazy=True)
+    engine.silence_s = engine_silence_s(profile)
+    vision = None
+    if profile.get("vision"):
+        vcfg = {k: absolute(v) if k in ("exe", "model", "mmproj") else v
+                for k, v in profile["vision"].items()}
+        vision = Vision(vcfg, env=vision_env(profile, env), lazy=True)
+    result = Service(engine, tok, ChatTemplate(tpath / "chat_template.jinja"), model_name=model,
+                     vision=vision, sampling_defaults=sampling_defaults_from_config(profile))
+    result.effort_end = bool(effort)
+    return result
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--engine", choices=["mock", "strata"], default="mock")
@@ -6876,6 +6941,12 @@ def main() -> int:
         raise SystemExit(f"[strata] config {e}")
     if svc.aliases:
         print(f"[strata] model aliases: {', '.join(svc.aliases)}", flush=True)
+    if cfg.get("model_registry") is not None:
+        from serve.model_registry import from_config
+        try:
+            svc.model_registry = from_config(svc, cfg, installed_model_service)
+        except (ValueError, KeyError, OSError, TypeError, IndexError) as e:
+            raise SystemExit("invalid installed-model registry; check profiles and asset provenance") from e
     if ("STRATA_API_KEY" in os.environ and not os.environ["STRATA_API_KEY"].strip()) or             any(x == "--api-key" and i + 1 < len(sys.argv) and not sys.argv[i + 1].strip() or x.strip() == "--api-key="
                 for i, x in enumerate(sys.argv)):
         # #213: an empty key would switch authentication off without a word
@@ -7029,15 +7100,19 @@ def main() -> int:
         print("\n[strata] stopping (Ctrl+C again to end the engine at once) ...", flush=True)
         closers = [httpd.shutdown, getattr(engine, "close", None), vision.shutdown if vision else None,
                    hub.close if hub is not None else None]
+        if svc.model_registry is not None:
+            svc.model_registry.stopping = True
+            closers = [httpd.shutdown, svc.model_registry.close, hub.close if hub is not None else None]
         for close in filter(None, closers):
             try:
                 close()
             except KeyboardInterrupt:                   # a second Ctrl+C: don't wait for the engine to free its memory
-                if getattr(engine, "proc", None):
-                    engine.proc.kill()
+                current = svc.engine if svc.model_registry is not None else engine
+                if getattr(current, "proc", None):
+                    current.proc.kill()
         try:
             from serve import cache_drop
-            cache_drop.drop_after_exit(engine)           # opt-in (STRATA_DROP_CACHE_ON_EXIT=1), default unchanged
+            cache_drop.drop_after_exit(svc.engine if svc.model_registry is not None else engine)
         except Exception as e:  # noqa: BLE001 - never block the exit
             print(f"[strata] could not release the model files' cache: {e}", flush=True)
         print("[strata] stopped", flush=True)

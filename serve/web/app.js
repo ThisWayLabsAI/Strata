@@ -107,6 +107,7 @@ async function loadHealth() {
     $("tab-btn-images").hidden = !health.image_generation;
     $("chat-image-row").hidden = !health.chat_image_generation;
     renderChatReferences();
+    await loadChatModels();
     if (location.hash === "#images" && health.image_generation) showTab("images");
   } catch (e) {
     setTimeout(loadHealth, 2000);
@@ -565,6 +566,42 @@ function markdown(text) {
 const DEFAULTS = {thinking: "high", temperature: 0.6, top_p: 0.95, top_k: 20, max: "", seed: "", show: true, esp: true, mcp: true};
 let settings = {...DEFAULTS, ...store.get("sampling", {})};
 let messages = store.get("chat", []);
+let conversationModel = store.get("chatModel", null);
+let modelSelection = null;
+let modelStatusRequest = 0;
+async function loadChatModels() {
+  const request = ++modelStatusRequest;
+  try {
+    const stateResponse = await fetch("v1/model-selection", {headers: headers()});
+    if (!stateResponse.ok) { if (request === modelStatusRequest) $("chat-model-row").hidden = true; return; }
+    const state = await stateResponse.json();
+    const listing = await fetch("v1/models", {headers: headers()});
+    if (!listing.ok) throw new Error("Model list unavailable");
+    const entries = (await listing.json()).data.filter(entry => entry.switchable);
+    if (request !== modelStatusRequest) return;
+    modelSelection = state;
+    const select = $("chat-model");
+    const requested = conversationModel || modelSelection.default_model;
+    const options = entries.map(entry => [`${entry.id} · ${ctxfmt(entry.meta.n_ctx)}`, entry.id]);
+    if (!entries.some(entry => entry.id === requested)) options.push([`${requested} (unavailable)`, requested]);
+    const signature = JSON.stringify(options);
+    if (select.dataset.options !== signature) {
+      select.replaceChildren();
+      for (const [label, id] of options) select.add(new Option(label, id));
+      select.dataset.options = signature;
+    }
+    if (select.value !== requested) select.value = requested;
+    select.disabled = !!busy;
+    $("chat-model-row").hidden = false;
+    $("chat-model-status").textContent = `Requested: ${requested}. Active: ${modelSelection.active_model} (${modelSelection.loaded ? "loaded" : "unloaded"}). Selection applies on Send.`;
+  } catch (e) { if (request === modelStatusRequest) $("chat-model-status").textContent = "Model status unavailable. Retry by refreshing before sending."; }
+}
+$("chat-model").onchange = () => {
+  conversationModel = $("chat-model").value;
+  store.set("chatModel", conversationModel);
+  loadChatModels();
+};
+setInterval(() => { if (modelSelection && tab === "chat" && !document.hidden) loadChatModels(); }, 3000);
 let attachments = [];                 // {name, url}
 let attachmentReads = 0;
 let busy = null;                      // {controller, msg}
@@ -902,6 +939,7 @@ function assistantMessages(m) {
 }
 
 function setBusy(on) {
+  $("chat-model").disabled = on;
   $("stop-btn").hidden = !on;
   $("send-btn").disabled = on || attachmentReads > 0;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
@@ -911,6 +949,10 @@ function setBusy(on) {
 async function send() {
   const text = $("input").value.trim();
   if ((!text && !attachments.length) || busy || attachmentReads) return;
+  if (modelSelection && !conversationModel) {
+    conversationModel = modelSelection.default_model;
+    store.set("chatModel", conversationModel);
+  }
   let imageRequest;
   if (health.chat_image_generation && $("chat-image-enabled").checked && health.chat_image_editing) {
     const operation = $("chat-image-operation").value;
@@ -935,7 +977,7 @@ async function send() {
   busy = {controller, msg: m};
   setBusy(true);
 
-  const body = {model: health.model, messages: apiMessages(), stream: true,
+  const body = {model: modelSelection ? (conversationModel || modelSelection.default_model) : health.model, messages: apiMessages(), stream: true,
                 reasoning_effort: settings.thinking};
   if (settings.temperature > 0) {
     Object.assign(body, {temperature: +settings.temperature, top_p: +settings.top_p, top_k: +settings.top_k});
@@ -976,6 +1018,7 @@ async function send() {
         if (data === "[DONE]") continue;
         let j;
         try { j = JSON.parse(data); } catch (e) { continue; }
+        if (j.model) m.model = j.model;
         if (j.error) throw new Error(j.error.message || "the engine reported an error");
         if (j.usage) usage = j.usage;
         if (j.strata_mcp) onTool(m, j.strata_mcp);
@@ -1018,12 +1061,14 @@ async function send() {
   const ran = (m.tools || []).filter((t) => t.state === "done" || t.state === "error").length;
   if (ran) m.meta = `${m.meta ? `${m.meta} · ` : ""}${ran} tool call${ran > 1 ? "s" : ""}`;
   if (m.limit) m.meta = `${m.meta || ""} · stopped at the limit of ${m.limit} tool rounds (mcp.max_rounds)`;
+  if (m.model && modelSelection) m.meta = `${m.model}${m.meta ? ` · ${m.meta}` : ""}`;
   busy = null;
   setBusy(false);
   if (frame) cancelAnimationFrame(frame);
   updateAssistant(el, m, false);
   saveChat();
   scrollDown();
+  if (modelSelection) await loadHealth();
 }
 
 $("composer").onsubmit = (e) => { e.preventDefault(); send(); };
@@ -1042,8 +1087,10 @@ $("input").addEventListener("input", autosize);
 
 $("new-btn").onclick = () => {
   if (busy) { toast("warn", "Still writing", "Stop the answer first."); return; }
-  if (!messages.length) return;
+  if (!messages.length) { conversationModel = null; store.set("chatModel", null); loadChatModels(); return; }
   const backup = messages;
+  const modelBackup = conversationModel;
+  conversationModel = null; store.set("chatModel", null); loadChatModels();
   const referenceBackup = chatReferences.splice(0);
   renderChatReferences(); renderAttachments();
   let undone = false;
@@ -1051,7 +1098,7 @@ $("new-btn").onclick = () => {
   messages = [];
   saveChat();
   renderChat();
-  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; chatReferences.splice(0, chatReferences.length, ...referenceBackup); renderChatReferences(); renderAttachments(); saveChat(); renderChat(); }});
+  toast("info", "New chat", "The last one was cleared.", 6000, {label: "Undo", run: () => { undone = true; messages = backup; conversationModel = modelBackup; store.set("chatModel", conversationModel); loadChatModels(); chatReferences.splice(0, chatReferences.length, ...referenceBackup); renderChatReferences(); renderAttachments(); saveChat(); renderChat(); }});
   setTimeout(() => { if (!undone) StrataChatImages.remove([...new Set(imageIds)]); }, 6500);
 };
 $("export-btn").onclick = () => {
@@ -1060,7 +1107,7 @@ $("export-btn").onclick = () => {
     `<details><summary>Tool ${t.server ? `${t.server} / ` : ""}${t.tool || t.name}${t.ok ? "" : " (error)"}</summary>\n\n` +
     `\`\`\`json\n${JSON.stringify(t.arguments || {}, null, 2)}\n\`\`\`\n\n\`\`\`\n${t.result}\n\`\`\`\n\n</details>\n\n`).join("");
   const md = messages.map((m) => m.role === "user" ? `## You\n\n${m.text}\n` :
-    `## ${health.model}\n\n${m.reasoning ? `<details><summary>Thinking</summary>\n\n${m.reasoning}\n\n</details>\n\n` : ""}${tools(m)}${m.text || m.error || ""}${StrataChatImages.exported(m)}\n`).join("\n");
+    `## ${m.model || health.model}\n\n${m.reasoning ? `<details><summary>Thinking</summary>\n\n${m.reasoning}\n\n</details>\n\n` : ""}${tools(m)}${m.text || m.error || ""}${StrataChatImages.exported(m)}\n`).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([md], {type: "text/markdown"}));
   a.download = `strata-chat-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.md`;

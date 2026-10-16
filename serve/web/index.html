@@ -53,6 +53,10 @@
         <button type="button" class="st-btn st-btn--secondary" id="jump-latest">Jump to latest</button>
       </div>
       <form class="st-composer" id="composer">
+        <div id="chat-model-row" hidden>
+          <label>Conversation model <select id="chat-model" class="st-input" aria-describedby="chat-model-status"></select></label>
+          <span id="chat-model-status" class="muted small" role="status"></span>
+        </div>
         <div class="attachments" id="attachments" hidden></div>
         <div class="chat-image-opt-in" id="chat-image-row" hidden><label><input type="checkbox" id="chat-image-enabled">Create images in chat</label><button type="button" id="chat-image-settings" class="st-btn st-btn--secondary" aria-controls="chat-image-inputs" aria-expanded="false" hidden>Image settings</button><span class="muted small">Attachments stay for analysis unless selected as references.</span></div>
         <div id="chat-image-inputs" class="chat-image-inputs" hidden>
