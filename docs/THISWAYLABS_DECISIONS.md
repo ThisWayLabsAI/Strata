@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Model switching: authorized local deployment
+
+After native validation the user requested deployment for testing. Deploy application `54caf337` by local stable fast-forward and add only the validated two-model registry to live Original's config. Keep Original as startup default, preserve every prior config value, and leave SC117's standalone config/dev configs/controls unchanged. The normal service supports per-conversation Original/SC117 selection; the manual SC117 startup remains the legacy single-model path. Preserve rollback `0b7f7517` and private pre-change backups. Both live selector directions, actual response IDs, refresh persistence, auth, MCP and served assets passed. See the current handoff; GitHub publication remains pending authentication.
+
 ## Model switching: development implementation
 
 Native validation subsequently passed for Original and SC117 using the unchanged installed engines/assets and a temporary private registry config; see the handoff for exact evidence. Native browser testing found the combined selector/image controls crowded keyboard-height layouts, so `68773abc` moves model settings into a bounded compact panel and preserves Stop space. Explicit selection of the current unloaded model now loads it (`2744b7dd`), matching the documented endpoint contract. The user authorized testing and restoration of live; no source/config deployment or registry activation was performed. Live was restored at `0b7f7517` and remains available.
