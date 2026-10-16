@@ -1,6 +1,6 @@
 # Private chat
 
-Implemented on `feature/private-chat` from `767b034c`. This is browser-local chat privacy, with no changes to server logging, API monitoring, native inference or tools.
+Application `886d49e0`, developed on `feature/private-chat` from `767b034c`, is deployed locally in `C:\AI\Strata`. Refresh the app to use the toggle. This is browser-local chat privacy, with no changes to server logging, API monitoring, native inference or tools.
 
 The **Private chat** checkbox beside the thread title defaults off. Enabling it keeps the current history, draft, model and attached inputs in memory. It drains saves already queued before activation, cancels the pending draft timer and starts a distinct ephemeral conversation. It does not flush the draft at activation. Earlier content already saved to the library remains there; remove that saved thread explicitly if desired. The header shows **Chats · Private**, including when the thread heading has scrolled away.
 
@@ -13,6 +13,8 @@ Leaving the private conversation revokes its object URLs and drops cached PNGs. 
 This does not erase earlier saved copies, explicit downloads/exports, server/tool logs, engine caches or operating-system/browser internals. Requests still reach Strata and enabled tools. Image inference uses the existing temporary-file cleanup path. The Images tab and browser-wide preferences remain separate from private chat; this is not a browser-wide incognito mode or a server zero-retention guarantee. The UI explains this scope. Saving must initialize successfully before the toggle is usable.
 
 ## Validation
+
+Local deployment used a verified bundle and stable fast-forward. The existing elevated Stop control reported an unsuccessful exit, but subsequent independent checks confirmed zero 8080/8081 listeners and zero native workers; source changed only after that confirmation. The unchanged scheduled task restarted live. Health returned `ok`; all five changed served assets matched source, all four live/dev configs retained their hashes and Git connectivity verification passed. An isolated live browser enabled the checkbox, verified a private draft/thread stayed out of storage, then refreshed and confirmed private mode and draft were gone. No inference was needed and no user browser history was accessed. Browser errors were empty and the screenshot was inspected. Rollback `rollback/pre-private-chat-20261015` retains `767b034c`. Evidence/bundle/config hashes: `Strata-data\backups\private-chat-deploy-20261015-1`; screenshot: `Strata-data\logs\private-chat-20261015\live-private.png`. Keys, models, configs, packages, controls and scheduled-task settings were unchanged. GitHub publication remains pending authentication.
 
 CPU fixtures only, Chromium 154 on Windows; live remained available during implementation. Six screen sizes (320x568, 390x844, 844x390, 1280x844, 390x300, 320x256) each passed 20 private-chat and four real-refresh assertions. Tests instrument IndexedDB put/add and localStorage writes, verify zero private database writes, retain the original saved chat, refuse direct private-record persistence, test cancel/discard/New and check no sensitive marker after reload. The final 21-assertion suite at 390x844 also verifies private reference editing without database writes.
 

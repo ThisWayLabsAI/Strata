@@ -2,7 +2,7 @@
 
 ## Private chat follow-up
 
-Implemented on `feature/private-chat`, based on deployed label fix `767b034c`. Acceptance: a visible opt-in toggle; in-memory current history/draft/model/PNG results; no private chat, index, image or compatibility-store writes; earlier saved copies retained until explicit deletion; safe discard/cancel/New/Open, reload cleanup and frozen mode during generation/file reading. Browser privacy scope and explicit export/download are disclosed. CPU/browser validation passed; see [PRIVATE_CHAT.md](PRIVATE_CHAT.md). Speech input/read-aloud are not implemented.
+Application `886d49e0` is deployed locally, based on label fix `767b034c`. Acceptance: a visible opt-in toggle; in-memory current history/draft/model/PNG results; no private chat, index, image or compatibility-store writes; earlier saved copies retained until explicit deletion; safe discard/cancel/New/Open, reload cleanup and frozen mode during generation/file reading. Browser privacy scope and explicit export/download are disclosed. CPU/browser and live deployment validation passed; see [PRIVATE_CHAT.md](PRIVATE_CHAT.md). Speech input/read-aloud are not implemented.
 
 ## Requested follow-up: saved chat library
 
