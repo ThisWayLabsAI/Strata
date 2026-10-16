@@ -6,6 +6,43 @@ const api = globalThis.StrataImage;
 const png = api.fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==");
 const metadata = {schema: api.SCHEMA, prompt: "A cat 🐈, café, 猫", seed: 0, size: "1024x1024", model: "qwen-image-2.1-turbo",
   createdAt: "2026-10-15T18:00:00.000Z", settings: {steps: 8, backend: "cuda", quant: "Q8_0"}};
+
+test("Mobile renaming and missing/generic/wrong MIME preserve PNG recipe and received bytes", async () => {
+  const {File} = require("node:buffer"), {createHash} = require("node:crypto");
+  const bytes = api.write(png, metadata);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  for (const type of ["image/png", "", "application/octet-stream", "image/jpeg"]) {
+    const info = await api.inspectFile(new File([bytes], "1000063957", {type}));
+    assert.equal(info.mime, "image/png"); assert.equal(info.size, bytes.length);
+    assert.deepEqual(info.recipe, metadata); assert.equal(info.recipeError, "");
+    assert.deepEqual(new Uint8Array(await info.blob.arrayBuffer()), bytes);
+    if (globalThis.crypto?.subtle) assert.equal(info.sha256, hash);
+  }
+});
+
+test("Missing or damaged recipes are distinguished without rewriting received pixels", async () => {
+  const {File} = require("node:buffer");
+  const info = await api.inspectFile(new File([png], "1000063957.png"));
+  assert.equal(info.recipe, null); assert.equal(info.recipeError, "");
+  const damaged = png.subarray(0, 30);
+  const broken = await api.inspectFile(new File([damaged], "broken.png"));
+  assert.equal(broken.recipe, null); assert.match(broken.recipeError, /could not be read/);
+  assert.deepEqual(new Uint8Array(await broken.blob.arrayBuffer()), damaged);
+});
+
+test("Inspection checks size before reading and keeps uploads usable without hashing", async () => {
+  await assert.rejects(api.inspectFile({size: api.MAX_FILE + 1, arrayBuffer() { throw new Error("must not read"); }}), /20 MB/);
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  Object.defineProperty(globalThis, "crypto", {configurable: true, value: undefined});
+  try {
+    const {File} = require("node:buffer");
+    const info = await api.inspectFile(new File([api.write(png, metadata)], "source.png"));
+    assert.equal(info.sha256, null); assert.deepEqual(info.recipe, metadata);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "crypto", descriptor);
+    else delete globalThis.crypto;
+  }
+});
 function chunks(data) {
   const bytes = Buffer.from(data), result = [];
   for (let pos = 8; pos < bytes.length;) {

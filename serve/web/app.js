@@ -601,6 +601,7 @@ function renderChatReferences() {
   $("chat-image-settings").textContent = `${$("chat-image-operation").value === "edit" ? "Edit" : "Generate"} · ${chatReferences.length} refs`;
   $("chat-image-inputs").hidden = !enabled || $("chat-image-settings").getAttribute("aria-expanded") !== "true";
   $("chat-image-operation").disabled = !!busy;
+  $("chat-image-browse-file").disabled = !!busy || attachmentReads > 0;
   const box = $("chat-image-references"); box.replaceChildren();
   chatReferences.forEach((ref, index) => {
     const row = document.createElement("div"); row.className = "chat-reference";
@@ -1074,9 +1075,9 @@ function isTextFile(f) {
   return f.type.startsWith("text/") || /json|xml|javascript|yaml|toml|x-sh|x-python/.test(f.type) ||
          TEXT_EXT.test(f.name) || /(^|[\\/])(makefile|dockerfile|readme|license)$/i.test(f.name);
 }
-function addFiles(files) {
+function addFiles(files, {imageOnly = false} = {}) {
   for (const f of files) {
-    if (f.type.startsWith("image/") || /\.png$/i.test(f.name)) {
+    if (imageOnly || f.type.startsWith("image/") || /\.png$/i.test(f.name)) {
       if (f.size > 20e6) { toast("warn", "Picture too large", `${f.name} is over 20 MB.`); continue; }
       attachmentReads++; setBusy(!!busy);
       addChatImage(f).catch((error) => toast("error", "Could not read image", error.message))
@@ -1114,7 +1115,12 @@ function renderAttachments() {
     const c = document.createElement("span");
     c.className = "chip";
     c.innerHTML = icon(a.kind === "file" ? "attach" : "image", "st-icon st-icon--sm");
-    c.append(a.name);
+    if (a.uploadInfo) {
+      c.classList.add("chip--image");
+      const details = document.createElement("button"); details.type = "button"; details.className = "st-btn st-btn--secondary upload-info-name";
+      details.textContent = a.name; details.setAttribute("aria-label", `File details for ${a.name}`);
+      details.onclick = () => showUploadInfo(a.name, a.uploadInfo); c.append(details);
+    } else c.append(a.name);
     if (a.kind !== "file" && a.url && health.chat_image_editing) {
       const pick = document.createElement("button"); pick.type = "button"; pick.className = "chat-reference-pick st-btn st-btn--secondary";
       const selected = chatReferences.some(ref => ref.data === a.url);
@@ -1260,11 +1266,9 @@ poll();
 
 // ------------------------------------------------------------------ images (POST /v1/images/generations)
 async function addChatImage(file) {
-  let metadata = null;
-  if (file.type === "image/png" || /\.png$/i.test(file.name)) {
-    try { metadata = StrataImage.read(new Uint8Array(await file.arrayBuffer())); }
-    catch (error) { toast("warn", "PNG recipe could not be read", error.message); }
-  }
+  const info = await StrataImage.inspectFile(file), metadata = info.recipe;
+  if (!info.mime.startsWith("image/")) throw new Error("Choose a PNG, JPEG or WebP image file.");
+  if (info.recipeError) toast("warn", "PNG recipe could not be read", info.recipeError);
   if (metadata) attachments.push({kind: "file", imageRecipe: true, name: `${file.name || "image"}.recipe.json`, text: JSON.stringify(metadata, null, 2)});
   if (health.images) {
     try {
@@ -1272,13 +1276,24 @@ async function addChatImage(file) {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = () => reject(new Error("Could not read the image file."));
-        reader.readAsDataURL(file.type ? file : new Blob([file], {type: "image/png"}));
+        reader.readAsDataURL(info.blob);
       });
-      attachments.push({kind: "image", name: file.name || "pasted image", url});
+      const {blob, recipe, ...uploadInfo} = info;
+      attachments.push({kind: "image", name: file.name || "pasted image", url, uploadInfo: {...uploadInfo, recipeFound: !!recipe, seed: recipe?.seed, sizeSetting: recipe?.size}});
     } catch (error) { toast("error", "Could not attach image", error.message); }
   } else if (!metadata) toast("warn", "Pictures are off", "This model was set up for text only.");
   renderAttachments();
 }
+function showUploadInfo(name, info) {
+  $("upload-info-status").textContent = info.recipeFound ? `Strata recipe found — seed ${info.seed}, ${info.sizeSetting}.` :
+    info.recipeError || "No Strata recipe found in the received file. This does not establish where metadata was lost.";
+  $("upload-info-data").textContent = JSON.stringify({filename: name, format: info.mime, reportedFormat: info.reportedMime,
+    bytes: info.size, sha256: info.sha256 || "Unavailable in this browser", recipeFound: info.recipeFound}, null, 2);
+  $("upload-info-dialog").showModal();
+}
+$("upload-info-copy").onclick = () => copyText($("upload-info-status").textContent + "\n" + $("upload-info-data").textContent);
+$("chat-image-browse-file").onclick = () => { if (!busy && !attachmentReads) $("chat-image-original-file").click(); };
+$("chat-image-original-file").onchange = () => { addFiles($("chat-image-original-file").files, {imageOnly: true}); $("chat-image-original-file").value = ""; };
 const validImageSeed = (seed) => (typeof seed === "number" || (typeof seed === "string" && seed.trim() !== "")) &&
   Number.isSafeInteger(Number(seed)) && Number(seed) >= 0;
 function keepImageInputVisible() {

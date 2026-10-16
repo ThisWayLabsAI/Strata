@@ -75,6 +75,12 @@ main { flex: 1; min-height: 0; display: flex; }
         background: var(--st-surface-2); border: 1px solid var(--st-line); font-size: var(--st-fs-xs); color: var(--st-ink-soft); }
 .chip .st-btn--icon { width: 22px; height: 22px; border-radius: 50%; }
 .chip .st-btn--icon .st-icon { width: 14px; height: 14px; }
+.chip.chip--image { height: auto; min-height: 44px; flex-wrap: wrap; max-width: 100%; }
+.chip .upload-info-name { min-height: 44px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 6px; }
+.upload-info-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(var(--chat-viewport-height, 100dvh) - 32px); box-sizing: border-box; overflow: auto; padding: 18px; border: 1px solid var(--st-line); border-radius: var(--st-r-md); background: var(--st-surface); color: var(--st-ink); }
+.upload-info-dialog::backdrop { background: #0008; }
+.upload-info-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.upload-info-dialog button { min-height: 44px; }
 
 /* ---------------------------------------------------------------- monitor */
 .view--monitor, .view--about { overflow-y: auto; }

@@ -32,12 +32,16 @@
         recipeButton.onclick = () => { if (!running && !reading) useImageRecipe(ref.recipe, {keepReferences:true}); };
         actions.append(recipeButton);
       }
+      const info = document.createElement("button"); info.type = "button"; info.className = "st-btn st-btn--secondary"; info.textContent = "File details";
+      info.disabled = running || reading;
+      info.onclick = () => showUploadInfo(ref.name, ref.uploadInfo); actions.append(info);
       const recipeStatus = document.createElement("span"); recipeStatus.className = "muted small";
       recipeStatus.textContent = ref.recipe ? "Strata recipe found — load it without selecting the file again." : ref.recipeError || "No Strata recipe found in this image.";
       card.append(preview, label, role, actions, recipeStatus); list.append(card);
     });
     $("img-reference-inputs").disabled = !ready || reading || running;
     $("img-reference-upload").disabled = !ready || reading || running;
+    $("img-reference-browse-files").disabled = !ready || reading || running;
     $("img-operation").disabled = reading || running;
     $("img-go").textContent = edit ? "Edit image" : "Generate";
     $("img-go").disabled = running || reading || (edit && (!ready || !refs.length));
@@ -54,18 +58,16 @@
   async function add(file) {
     if (!ready) throw new Error("Reference editing is not configured on this server.");
     if (refs.length >= 3 || !file.size || file.size > MAX || refs.reduce((n, r) => n + r.size, 0) + file.size > TOTAL) throw new Error("Use up to 3 images, 8 MB each and 20 MB total.");
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Choose a still PNG, JPEG or WebP image.");
+    const info = await StrataImage.inspectFile(file);
+    if (!["image/png", "image/jpeg", "image/webp"].includes(info.mime)) throw new Error("Choose a still PNG, JPEG or WebP image.");
     const data = await new Promise((resolve, reject) => {
-      const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("Could not read image.")); reader.readAsDataURL(file);
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("Could not read image.")); reader.readAsDataURL(info.blob);
     });
     const image = new Image(); image.src = data; await image.decode();
     if (image.naturalWidth * image.naturalHeight > 16_000_000) throw new Error("Use an image of at most 16 megapixels.");
-    let recipe, recipeError;
-    if (file.type === "image/png") {
-      try { recipe = StrataImage.read(new Uint8Array(await file.arrayBuffer())); }
-      catch (_) { recipeError = "Recipe could not be read. The image can still be used as a reference."; }
-    }
-    refs.push({data, name: (file.name || "reference").slice(0, 160).replace(/[\x00-\x1f]/g, ""), role: refs.length ? "identity" : "source", size: file.size, recipe, recipeError});
+    const {blob, recipe, recipeError, ...details} = info;
+    const uploadInfo = {...details, recipeError, recipeFound: !!recipe, seed: recipe?.seed, sizeSetting: recipe?.size};
+    refs.push({data, name: (file.name || "reference").slice(0, 160).replace(/[\x00-\x1f]/g, ""), role: refs.length ? "identity" : "source", size: file.size, recipe, recipeError, uploadInfo});
   }
   async function importing(action) {
     if (reading || running) return;
@@ -79,6 +81,11 @@
     for (const file of files) await add(file);
   });
   upload.onclick = () => $("img-reference-files").click();
+  $("img-reference-browse-files").onclick = () => $("img-reference-original-files").click();
+  $("img-reference-original-files").onchange = () => {
+    const files = [...$("img-reference-original-files").files]; $("img-reference-original-files").value = "";
+    return importFiles(files);
+  };
   $("img-reference-files").onchange = () => {
     const files = [...$("img-reference-files").files]; $("img-reference-files").value = "";
     return importFiles(files);

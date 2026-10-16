@@ -186,5 +186,25 @@
     const prefix = lines.length ? lines.join("\n") + "\n\nTemplate treatment:\n" : "";
     return {prompt: prefix + prompt, prefix, basePrompt: prompt};
   }
-  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters, prepareTemplate, editingSettings};
+  async function inspectFile(file) {
+    if (file.size > MAX_FILE) throw new Error("Image exceeds 20 MB.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // Inspect actual bytes: mobile providers can rename files or omit/mislabel MIME types.
+    const png = bytes.length >= 8 && signature.every((value, index) => bytes[index] === value);
+    const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    const webp = bytes.length >= 12 && String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" && String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
+    const mime = png ? "image/png" : jpeg ? "image/jpeg" : webp ? "image/webp" : file.type || "application/octet-stream";
+    let metadata = null, recipeError = "", sha256 = null;
+    if (png) {
+      try { metadata = read(bytes); }
+      catch (error) { recipeError = "Recipe could not be read: " + error.message; }
+    }
+    if (globalThis.crypto?.subtle) {
+      try { sha256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(value => value.toString(16).padStart(2, "0")).join(""); }
+      catch (_) { /* Upload remains usable when browser hashing is unavailable. */ }
+    }
+    return {mime, reportedMime: file.type || "not supplied", size: bytes.length, sha256, recipe: metadata, recipeError,
+      blob: new Blob([bytes], {type: mime})};
+  }
+  globalThis.StrataImage = {SCHEMA, MAX_FILE, recipe, read, write, fromBase64, toBase64, starters, prepareTemplate, editingSettings, inspectFile};
 })();

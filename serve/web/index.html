@@ -58,6 +58,9 @@
         <div id="chat-image-inputs" class="chat-image-inputs" hidden>
           <label>Image operation <select class="st-input" id="chat-image-operation"><option value="generate">Generate</option><option value="edit">Edit selected source</option></select></label>
           <div id="chat-image-references"></div>
+          <button type="button" class="st-btn st-btn--secondary" id="chat-image-browse-file">Browse original image file</button>
+          <input type="file" id="chat-image-original-file" accept=".png,.jpg,.jpeg,.webp,application/octet-stream" hidden>
+          <p class="muted small">The file picker depends on your phone/browser. Tap an attached image's filename to check its recipe and received file details.</p>
           <p id="chat-image-guidance" class="muted small" role="status"></p>
           <p class="muted small">Reference inputs are temporary; reattach or select a saved output after refresh. Chat edits affect the whole image. Use Images for brush selection and local pixel protection. Camera changes remain experimental.</p>
         </div>
@@ -95,6 +98,9 @@
             <p class="muted small" id="img-reference-status" role="status">Checking reference support…</p>
             <fieldset id="img-reference-inputs" disabled>
               <input type="file" id="img-reference-files" accept="image/png,image/jpeg,image/webp" aria-label="Reference image files" multiple hidden>
+              <input type="file" id="img-reference-original-files" accept=".png,.jpg,.jpeg,.webp,application/octet-stream" multiple hidden>
+              <button type="button" class="st-btn st-btn--secondary" id="img-reference-browse-files">Browse original image files</button>
+              <p class="muted small">Try Browse for the original downloaded PNG. Your phone/browser decides which picker opens. File details shows the received format and recipe status.</p>
               <button type="button" class="img-upload" id="img-reference-upload" aria-describedby="img-upload-limits">
                 <svg class="st-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4m-4 4 4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
                 <strong>Add reference images</strong>
@@ -368,6 +374,13 @@
   </div>
 </aside>
 <div class="scrim" id="scrim" hidden></div>
+<dialog id="upload-info-dialog" class="upload-info-dialog" aria-labelledby="upload-info-title">
+  <h2 id="upload-info-title" tabindex="-1" autofocus>Uploaded image details</h2>
+  <p id="upload-info-status"></p>
+  <pre id="upload-info-data"></pre>
+  <p class="muted small">These details describe the file received from your browser, before image processing. Matching SHA-256 values mean matching file bytes, even if the filename changes. The hash here differs from the normalized reference hash recorded in edit recipes.</p>
+  <form method="dialog"><button type="button" id="upload-info-copy" class="st-btn st-btn--secondary">Copy details</button> <button class="st-btn st-btn--secondary">Close</button></form>
+</dialog>
 <div class="st-toasts" id="toasts" aria-live="polite"></div>
 <script src="web/image-tools.js"></script>
 <script src="web/chat-images.js"></script>
