@@ -617,6 +617,37 @@ let busy = null;                      // {controller, msg}
 let chatLayout = store.get("chatLayout", "auto");
 if (!["auto", "mobile", "desktop"].includes(chatLayout)) chatLayout = "auto";
 let mobileChat = false;
+let composerCollapsed = true;
+function setComposerCollapsed(collapsed, focus = false) {
+  composerCollapsed = collapsed;
+  document.documentElement.dataset.composerCollapsed = String(mobileChat && collapsed);
+  if (collapsed) {
+    $("composer-options-toggle").setAttribute("aria-expanded", "false");
+    $("chat-options").dataset.open = "false";
+    if (document.activeElement === $("input")) $("input").blur();
+  }
+  $("composer-expand").textContent = $("input").value.trim() ? "Continue draft…" : messages.length ? "Ask a follow-up…" : "Ask anything…";
+  $("composer-expand").setAttribute("aria-expanded", String(!collapsed));
+  if (focus) $(collapsed ? "composer-expand" : "input").focus();
+  autosize();
+}
+$("composer-expand").onclick = () => setComposerCollapsed(false, true);
+$("composer-collapse").onclick = () => setComposerCollapsed(true, true);
+$("input").addEventListener("focus", () => { if (mobileChat && composerCollapsed) setComposerCollapsed(false); });
+$("composer-options-toggle").onclick = () => {
+  const open = $("chat-options").dataset.open !== "true";
+  $("chat-options").dataset.open = String(open);
+  $("composer-options-toggle").setAttribute("aria-expanded", String(open));
+};
+$("chat-options-new").onclick = () => $("new-btn").click();
+$("chat-options-export").onclick = () => $("export-btn").click();
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && $("chat-options").dataset.open === "true") {
+    $("chat-options").dataset.open = "false";
+    $("composer-options-toggle").setAttribute("aria-expanded", "false");
+    $("composer-options-toggle").focus();
+  }
+});
 let followLatest = true;
 let chatScrollFrame = 0;
 let readingAnchor = null;
@@ -671,6 +702,7 @@ function installThread(record, preserveInputs = false) {
   $("threads-btn").textContent = isPrivateChat() ? "Chats · Private" : "Chats";
   $("thread-storage-error").hidden = true;
   renderChatReferences(); renderAttachments(); renderChat(); autosize(); loadChatModels();
+  setComposerCollapsed(true);
 }
 function canChangeThread() {
   if (!threadsReady || threadTransition || busy || attachmentReads) {
@@ -719,7 +751,7 @@ async function changeThread(id = null, privateMode = isPrivateChat()) {
     } else installThread(record);
     $("threads-dialog").close();
   } catch (error) { threadError(error); }
-  finally { threadTransition = false; setBusy(false); if (!$("threads-dialog").open) $("input").focus(); }
+  finally { threadTransition = false; setBusy(false); if (!$("threads-dialog").open) $(mobileChat ? "composer-expand" : "input").focus(); }
 }
 async function initializeThreads() {
   try {
@@ -807,6 +839,7 @@ function selectChatReference(data, name) {
   if (busy || attachmentReads || threadTransition) throw new Error("Wait for the current request or file reading to finish.");
   if (!health.chat_image_editing) throw new Error("Chat references require the updated server. Use Images for now.");
   if (chatReferences.length >= 3) throw new Error("Use at most three references. Remove one first.");
+  if (mobileChat) { setComposerCollapsed(false); $("chat-options").dataset.open = "true"; $("composer-options-toggle").setAttribute("aria-expanded", "true"); }
   chatReferences.push({id: crypto.randomUUID(), data, name, role: chatReferences.length ? "identity" : "source"});
   $("chat-image-enabled").checked = true; store.set("chatImageTools", true);
   $("chat-image-settings").setAttribute("aria-expanded", "true");
@@ -1035,6 +1068,7 @@ function applyChatLayout() {
   if (viewport.content !== viewportContent) viewport.content = viewportContent;
   mobileChat = chatLayout === "mobile" || (chatLayout === "auto" && mobileViewport.matches);
   document.documentElement.dataset.mobileChat = String(mobileChat);
+  setComposerCollapsed(composerCollapsed);
   $("chat-layout").value = chatLayout;
   $("chat-jump").hidden = true;
   followLatest = nearBottom();
@@ -1125,6 +1159,10 @@ function setBusy(on) {
   $("chat-model").disabled = on || threadTransition || !threadsReady;
   $("chat-model-settings").disabled = on;
   $("stop-btn").hidden = !on;
+  $("send-btn").hidden = on;
+  document.documentElement.dataset.chatBusy = String(on);
+  $("composer-expand").disabled = threadTransition || !threadsReady;
+  $("chat-options-new").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("send-btn").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
   renderChatReferences(); renderAttachments();
@@ -1162,6 +1200,7 @@ async function send() {
   $("chat-model-settings").setAttribute("aria-expanded", "false");
   busy = {controller, msg: m};
   setBusy(true);
+  if (mobileChat) setComposerCollapsed(true);
 
   const body = {model: modelSelection ? (conversationModel || modelSelection.default_model) : health.model, messages: apiMessages(), stream: true,
                 reasoning_effort: settings.thinking};
@@ -1270,6 +1309,7 @@ function autosize() {
   t.style.height = `${Math.min(t.scrollHeight, Math.max(48, height * (mobileChat ? 0.25 : 0.4)))}px`;
 }
 $("input").addEventListener("input", autosize);
+$("input").addEventListener("input", () => { if (mobileChat && composerCollapsed) setComposerCollapsed(false); });
 $("input").addEventListener("input", () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveChat, 350); });
 document.addEventListener("visibilitychange", () => { if (document.hidden && threadsReady && !threadTransition) saveChat(); });
 window.addEventListener("pagehide", () => {
@@ -1305,6 +1345,7 @@ function isTextFile(f) {
 }
 function addFiles(files, {imageOnly = false} = {}) {
   if (threadTransition || !threadsReady) return;
+  if (mobileChat && files.length) setComposerCollapsed(false);
   for (const f of files) {
     if (imageOnly || f.type.startsWith("image/") || /\.png$/i.test(f.name)) {
       if (f.size > 20e6) { toast("warn", "Picture too large", `${f.name} is over 20 MB.`); continue; }
@@ -1692,6 +1733,7 @@ $("img-delete-template").onclick = () => {
 };
 function discussImageRecipe(metadata, url, name = "generated-image.png") {
   if (!threadsReady || threadTransition) { toast("warn", "Please wait", "Chat storage is still opening."); return; }
+  if (mobileChat) setComposerCollapsed(false);
   attachments.push({kind: "file", imageRecipe: true, name: `${name}.recipe.json`, text: JSON.stringify(StrataImage.recipe(metadata), null, 2)});
   if (health.images) attachments.push({kind: "image", name, url});
   renderAttachments(); showTab("chat");

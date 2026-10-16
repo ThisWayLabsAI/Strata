@@ -2,6 +2,10 @@
 
 Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Mobile UI follow-up: composer and control spacing
+
+The user provided four Android/Brave screenshots and approved the proposed mobile layout pass. `fix/mobile-composer` from `8e8eaa62` adds a one-row reading composer, explicit expand/collapse with preserved drafts, automatic collapse on Send, a single Send/Stop action position, and mobile Options for model/image/New/Export. Dialog buttons stack with spacing/destructive styling; Choose image has its own row; file-picker help is collapsed. Desktop stays expanded. [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md) records the contract and test evidence: 468 assertions at six sizes, plus thread/image/private regressions and final smallest-layout checks. Three screenshots inspected; browser errors empty. Evidence: `Strata-data\logs\mobile-composer-20261015`. Native GPU/config changes are unnecessary. Deployment follows fixture validation; live has remained available during implementation.
+
 ## Current release: private chat deployed for user testing
 
 Application `886d49e0` is deployed in `C:\AI\Strata` on local stable `thiswaylabs`. Refresh and enable **Private chat** beside the thread title. New content bypasses browser chat/image storage; the header shows **Chats · Private**. Earlier saved copies remain in the library. New stays private, while opening a saved thread or turning privacy off confirms discard; turning privacy off starts a new saved conversation. Reload loses private contents. Server/tool logging and native caches are outside this browser-only feature. Explicit exports/downloads remain available. Speech input/read-aloud are not implemented yet.

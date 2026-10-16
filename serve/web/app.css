@@ -364,3 +364,44 @@ html[data-chat-compact="true"] #chat-model-row:not([data-open="true"]) { display
 .thread-row { border-top: 1px solid var(--st-line); padding: 12px 0; }
 .thread-open { text-align: left; white-space: normal; overflow-wrap: anywhere; width: 100%; justify-content: flex-start; }
 #threads-editor { border-top: 1px solid var(--st-line); padding-top: 12px; }
+
+/* Keep related controls separated and preserve one action position. */
+#private-discard-dialog { padding: 20px; }
+#private-discard-dialog form { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+#private-discard-dialog button { flex: 1; }
+#private-discard-dialog button[value="discard"] { color: var(--st-danger, #ef6666); border: 1px solid currentColor; background: transparent; }
+#chat-image-inputs { display: flex; flex-direction: column; gap: 12px; }
+#chat-image-inputs > label { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+#chat-image-inputs p { margin: 0; }
+#chat-image-browse-file { align-self: flex-start; min-height: 44px; }
+.chat-image-help summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.chat-image-help p { padding-top: 8px; }
+#send-btn, #stop-btn { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; }
+#composer-expand, #composer-collapse, #composer-options-toggle, .mobile-composer-actions { display: none; }
+#chat-options { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 600px) {
+  #private-discard-dialog form { flex-direction: column; }
+  #private-discard-dialog button { width: 100%; }
+}
+html[data-mobile-chat="true"] #composer-options-toggle,
+html[data-mobile-chat="true"] #composer-collapse { display: inline-flex; min-height: 44px; }
+html[data-mobile-chat="true"] #composer-options-toggle { padding-inline: 10px; }
+html[data-mobile-chat="true"] #composer .st-composer__bar { gap: 4px; flex-wrap: nowrap; }
+html[data-mobile-chat="true"] #composer #new-btn,
+html[data-mobile-chat="true"] #composer #export-btn,
+html[data-mobile-chat="true"] #composer #chat-model-settings { display: none; }
+html[data-mobile-chat="true"] #chat-options { display: none; }
+html[data-mobile-chat="true"] #chat-options[data-open="true"] {
+  display: flex; flex-direction: column; gap: 12px; position: absolute; bottom: calc(100% + 8px);
+  left: 0; right: 0; z-index: 6; padding: 12px; border: 1px solid var(--st-line); border-radius: 12px;
+  background: var(--st-bg); max-height: min(360px, calc(var(--chat-viewport-height, 100dvh) - 180px)); overflow: auto;
+}
+html[data-mobile-chat="true"] #chat-model-row:not([hidden]) { display: block; position: static; padding: 0; border: 0; max-height: none; }
+html[data-mobile-chat="true"] #chat-image-inputs { position: static; max-height: none; padding: 12px 0 0; border-width: 1px 0 0; border-radius: 0; box-shadow: none; }
+html[data-mobile-chat="true"] .mobile-composer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+html[data-mobile-chat="true"] #chat-image-row { margin: 0; gap: 8px; }
+html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer { flex-direction: row; align-items: center; gap: 8px; }
+html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer > :not(#composer-expand):not(.st-composer__bar) { display: none !important; }
+html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer-expand { display: flex; justify-content: flex-start; flex: 1; min-width: 0; min-height: 44px; text-align: left; color: var(--st-ink-muted); background: transparent; }
+html[data-mobile-chat="true"][data-composer-collapsed="true"] #composer .st-composer__bar > :not(#stop-btn) { display: none !important; }
+html[data-mobile-chat="true"][data-composer-collapsed="true"]:not([data-chat-busy="true"]) #composer .st-composer__bar { display: none; }

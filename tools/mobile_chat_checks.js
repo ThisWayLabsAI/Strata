@@ -3,6 +3,8 @@
 // Set the browser viewport first. Throws on a failure; returns the checked viewport.
 (async () => {
   const checked = [];
+  await document.fonts.ready;
+  setComposerCollapsed(false);
   const check = (condition, name) => { if (!condition) throw new Error(name); checked.push(name); };
   const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
   const waitFor = async (predicate) => {
@@ -126,9 +128,10 @@
   $("input").value = "error";
   await send();
   check(!busy && messages.at(-1).error.includes("Fixture error"), "HTTP error renders and permits next request");
-  const sendRect = rect("send-btn");
-  check(document.elementFromPoint(sendRect.left + sendRect.width / 2, sendRect.top + sendRect.height / 2)?.closest("#send-btn"),
-    "Error notification does not cover Send");
+  const readyAction = mobileChat && composerCollapsed ? "composer-expand" : "send-btn";
+  const sendRect = rect(readyAction);
+  check(document.elementFromPoint(sendRect.left + sendRect.width / 2, sendRect.top + sendRect.height / 2)?.closest("#"+readyAction),
+    "Error notification does not cover the ready composer action");
   check(nearBottom(), "Sending a new message resumes following");
   $("input").value = "complete";
   const completing = send();

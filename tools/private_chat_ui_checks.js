@@ -5,6 +5,7 @@
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const until=async predicate=>{for(let i=0;i<150;i++){if(predicate())return;await wait(20);}throw new Error("Private fixture timed out");};
   await changeThread();
+  $("chat-image-enabled").checked=false; $("chat-image-operation").value="generate";
   $("input").value="Public conversation kept"; await send(); await threadQueue;
   const publicId=currentThreadId(), publicRecord=JSON.stringify(await StrataThreads.get(publicId));
   const publicMirror=localStorage.getItem("strata.chat"), publicModel=localStorage.getItem("strata.chatModel");

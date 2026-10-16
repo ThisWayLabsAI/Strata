@@ -57,26 +57,31 @@
         <button type="button" class="st-btn st-btn--secondary" id="jump-latest">Jump to latest</button>
       </div>
       <form class="st-composer" id="composer">
+        <button type="button" id="composer-expand" class="st-btn" aria-label="Expand composer" aria-controls="input">Ask a follow-up…</button>
+        <div id="chat-options">
         <div id="chat-model-row" hidden>
           <label>Model <select id="chat-model" class="st-input" aria-describedby="chat-model-status"></select></label>
           <span id="chat-model-status" class="muted small" role="status"></span>
         </div>
-        <div class="attachments" id="attachments" hidden></div>
         <div class="chat-image-opt-in" id="chat-image-row" hidden><label><input type="checkbox" id="chat-image-enabled">Create images in chat</label><button type="button" id="chat-image-settings" class="st-btn st-btn--secondary" aria-controls="chat-image-inputs" aria-expanded="false" hidden>Image settings</button><span class="muted small">Attachments stay for analysis unless selected as references.</span></div>
         <div id="chat-image-inputs" class="chat-image-inputs" hidden>
           <label>Image operation <select class="st-input" id="chat-image-operation"><option value="generate">Generate</option><option value="edit">Edit selected source</option></select></label>
           <div id="chat-image-references"></div>
-          <button type="button" class="st-btn st-btn--secondary" id="chat-image-browse-file">Browse original image file</button>
+          <button type="button" class="st-btn st-btn--secondary" id="chat-image-browse-file">Choose image</button>
           <input type="file" id="chat-image-original-file" accept=".png,.jpg,.jpeg,.webp,application/octet-stream" hidden>
-          <p class="muted small">The file picker depends on your phone/browser. Tap an attached image's filename to check its recipe and received file details.</p>
+          <details class="chat-image-help"><summary>File picker help</summary><p class="muted small">The file picker depends on your phone/browser. Tap an attached image's filename to check its recipe and received file details.</p></details>
           <p id="chat-image-guidance" class="muted small" role="status"></p>
           <p class="muted small">Reference inputs are temporary; reattach or select a saved output after refresh. Chat edits affect the whole image. Use Images for brush selection and local pixel protection. Camera changes remain experimental.</p>
         </div>
+        <div class="mobile-composer-actions"><button type="button" class="st-btn st-btn--secondary" id="chat-options-new">New chat</button><button type="button" class="st-btn st-btn--secondary" id="chat-options-export">Export chat</button></div>
+        </div>
+        <div class="attachments" id="attachments" hidden></div>
         <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message" autocomplete="off"></textarea>
         <div class="st-composer__bar">
           <button type="button" class="st-btn st-btn--icon" id="attach-btn" title="Attach a text file (or drop it here)" aria-label="Attach a file">
             <svg class="st-icon"><use href="web/sprite.svg#i-attach"/></svg></button>
           <button type="button" class="st-btn st-btn--secondary" id="chat-model-settings" aria-label="Model settings" aria-controls="chat-model-row" aria-expanded="false" hidden>Model</button>
+          <button type="button" class="st-btn st-btn--secondary" id="composer-options-toggle" aria-controls="chat-options" aria-expanded="false">Options</button>
           <input type="file" id="file" multiple hidden>
           <button type="button" class="st-btn st-btn--icon" id="new-btn" title="New chat" aria-label="New chat">
             <svg class="st-icon"><use href="web/sprite.svg#i-new-chat"/></svg></button>
@@ -86,8 +91,9 @@
             <svg class="st-icon"><use href="web/sprite.svg#i-settings"/></svg></button>
           <span class="spacer"></span>
           <span class="composer-hint" id="composer-hint"></span>
-          <button type="button" class="st-btn st-btn--secondary" id="stop-btn" hidden>
-            <svg class="st-icon st-icon--sm"><use href="web/sprite.svg#i-stop"/></svg>Stop</button>
+          <button type="button" class="st-btn st-btn--icon" id="composer-collapse" title="Collapse composer" aria-label="Collapse composer" aria-controls="input"><svg class="st-icon" aria-hidden="true"><use href="web/sprite.svg#i-chevron"/></svg></button>
+          <button type="button" class="st-btn st-btn--secondary st-btn--icon" id="stop-btn" aria-label="Stop generating" title="Stop generating" hidden>
+            <svg class="st-icon st-icon--sm"><use href="web/sprite.svg#i-stop"/></svg></button>
           <button type="submit" class="st-btn st-btn--primary st-btn--send" id="send-btn" aria-label="Send">
             <svg class="st-icon"><use href="web/sprite.svg#i-send"/></svg></button>
         </div>

@@ -2,6 +2,7 @@
 (async () => {
   if (location.port !== "8092") throw new Error("Use the isolated model-switch fixture");
   await document.fonts.ready;
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const checks = [];
   const check = (ok, text) => { if (!ok) throw new Error(text); checks.push(text); };
   const waitFor = async predicate => {
@@ -10,8 +11,8 @@
   };
   await loadChatModels();
   check(!$("chat-model-row").hidden, "Opt-in registry exposes selector");
-  if (document.documentElement.dataset.chatCompact === "true") $("chat-model-settings").click();
-  check(document.documentElement.dataset.chatCompact !== "true" || $("chat-model-settings").getBoundingClientRect().height >= 44, "Compact model settings has a touch-sized control");
+  if (mobileChat) { setComposerCollapsed(false); if ($("chat-options").dataset.open !== "true") $("composer-options-toggle").click(); }
+  check(!mobileChat || $("composer-options-toggle").getBoundingClientRect().height >= 44, "Mobile options has a touch-sized control");
   const select = value => { $("chat-model").value = value; $("chat-model").dispatchEvent(new Event("change")); };
   select("sc117");
   await loadChatModels();
@@ -68,7 +69,7 @@
     check($("chat-model").value === "sc117" && $("chat-model").selectedOptions[0].text.includes("unavailable"), "Stale selection remains visible without substitution");
   } finally { window.fetch = originalFetch; }
   await loadChatModels();
-  if (document.documentElement.dataset.chatCompact === "true" && $("chat-model-settings").getAttribute("aria-expanded") !== "true") $("chat-model-settings").click();
+  if (mobileChat) { setComposerCollapsed(false); if ($("chat-options").dataset.open !== "true") $("composer-options-toggle").click(); }
   const box = $("chat-model").getBoundingClientRect();
   check(box.left >= 0 && box.right <= innerWidth && box.height >= 44, "Selector fits viewport with touch-sized height");
   check(document.documentElement.scrollWidth <= innerWidth, "No page-wide horizontal overflow");

@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Mobile composer: prioritize reading space
+
+At the user's request, collapse the mobile composer into one reading row after Send and expose Model/image settings through Options. Keep Stop visible in the same action position as Send. Explicit collapse preserves drafts, and typing after reopening prevents completion from collapsing the editor again. New/Export remain accessible in Options to keep the mobile toolbar within small widths. Separate/stack dialog and image controls with consistent gaps. This changes mobile UI defaults as explicitly requested; desktop remains expanded. [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md) records measurements, regression coverage and device-test limits.
+
 ## Private chat: memory-only browser conversation
 
 The user requested the private toggle described in the conversation. Start an ephemeral copy of the current conversation, leaving prior saved copies untouched and explicit in the UI. Bypass all browser chat/image database writes and legacy chat/model mirrors; do not persist mode or active private IDs. Keep generated PNGs in memory and drop them on leaving; confirm before discarding private contents. New remains private; turning privacy off starts a separate saved conversation. Explicit export/download can keep content. This does not change server/tool logging or inference caches. [PRIVATE_CHAT.md](PRIVATE_CHAT.md) records the contract and test evidence. Speech input/read-aloud were asked about but have not been implemented; local engines remain a possible follow-up.

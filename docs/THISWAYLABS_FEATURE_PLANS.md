@@ -1,5 +1,9 @@
 # Thiswaylabs feature plans
 
+## Mobile reading space and control spacing
+
+Implemented on `fix/mobile-composer` from `8e8eaa62`, after the user approved advice on four mobile screenshots. Acceptance: one-row reading state, explicit expansion/collapse preserving drafts, collapse after Send, no auto-collapse during typing, Stop replacing Send, model/image controls behind Options, separated dialog/Choose image buttons and retained 44px targets. Six-size CPU/browser checks and saved-thread/image/private regressions passed; see [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md). Actual Android testing follows deployment.
+
 ## Private chat follow-up
 
 Application `886d49e0` is deployed locally, based on label fix `767b034c`. Acceptance: a visible opt-in toggle; in-memory current history/draft/model/PNG results; no private chat, index, image or compatibility-store writes; earlier saved copies retained until explicit deletion; safe discard/cancel/New/Open, reload cleanup and frozen mode during generation/file reading. Browser privacy scope and explicit export/download are disclosed. CPU/browser and live deployment validation passed; see [PRIVATE_CHAT.md](PRIVATE_CHAT.md). Speech input/read-aloud are not implemented.
