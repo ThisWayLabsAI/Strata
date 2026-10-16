@@ -1,6 +1,7 @@
 // Run only against tools/model_switch_fixture.py (port 8092), never live history.
 (async () => {
   if (location.port !== "8092") throw new Error("Use the isolated model-switch fixture");
+  await document.fonts.ready;
   const checks = [];
   const check = (ok, text) => { if (!ok) throw new Error(text); checks.push(text); };
   const waitFor = async predicate => {

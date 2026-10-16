@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Private chat: memory-only browser conversation
+
+The user requested the private toggle described in the conversation. Start an ephemeral copy of the current conversation, leaving prior saved copies untouched and explicit in the UI. Bypass all browser chat/image database writes and legacy chat/model mirrors; do not persist mode or active private IDs. Keep generated PNGs in memory and drop them on leaving; confirm before discarding private contents. New remains private; turning privacy off starts a separate saved conversation. Explicit export/download can keep content. This does not change server/tool logging or inference caches. [PRIVATE_CHAT.md](PRIVATE_CHAT.md) records the contract and test evidence. Speech input/read-aloud were asked about but have not been implemented; local engines remain a possible follow-up.
+
 ## Saved chat library: requested replacement for destructive New
 
 The user subsequently requested deployment. Application `ee3204a8` is deployed locally through stable fast-forward after stopping idle live and verifying worker shutdown. Runtime configs retained their hashes. Live served assets, health, model listing, auth rejection and isolated browser New/Open/refresh checks passed; see the handoff for rollback and evidence. No GitHub publication or cross-device storage is implied.

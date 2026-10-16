@@ -1,0 +1,22 @@
+(async()=>{
+  if(location.port!=="8092")throw Error("Use CPU model fixture 8092");
+  const checks=[],check=(ok,label)=>{if(!ok)throw Error(label);checks.push(label);};
+  await changeThread(); await loadChatModels();
+  $("chat-model").value="original"; $("chat-model").onchange(); await threadQueue;
+  const publicId=currentThreadId(),mirror=localStorage.getItem("strata.chatModel");
+  await setPrivateChat(true);
+  $("chat-model").value="sc117"; $("chat-model").onchange(); await loadChatModels();
+  check(conversationModel==="sc117" && localStorage.getItem("strata.chatModel")===mirror,"Private model selection does not change the persisted public model");
+  $("input").value="Private model fixture"; const sending=send();
+  check($("private-chat").disabled,"Privacy toggle is disabled during inference");
+  await sending; await threadQueue;
+  check(messages.at(-1).model==="sc117" && (await StrataThreads.get(publicId)).model==="original","Private requests use selected model without changing saved thread identity");
+  check(!JSON.stringify(await StrataThreads.get(publicId)).includes("Private model fixture"),"Private model response and prompt remain absent from saved public history");
+  const disabledId=currentThreadId(); attachmentReads++;
+  await setPrivateChat(false); attachmentReads--;
+  check(isPrivateChat() && currentThreadId()===disabledId,"Reading files blocks privacy transitions");
+  window.dispatchEvent(new PageTransitionEvent("pagehide",{persisted:true}));
+  check(!messages.length && !$("input").value && !$("chat").querySelector(".st-msg"),"Page hide clears private content before a back-forward cache snapshot");
+  await setPrivateChat(false);
+  return {passed:checks.length,checks};
+})();

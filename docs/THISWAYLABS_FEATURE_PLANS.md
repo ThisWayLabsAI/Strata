@@ -1,5 +1,9 @@
 # Thiswaylabs feature plans
 
+## Private chat follow-up
+
+Implemented on `feature/private-chat`, based on deployed label fix `767b034c`. Acceptance: a visible opt-in toggle; in-memory current history/draft/model/PNG results; no private chat, index, image or compatibility-store writes; earlier saved copies retained until explicit deletion; safe discard/cancel/New/Open, reload cleanup and frozen mode during generation/file reading. Browser privacy scope and explicit export/download are disclosed. CPU/browser validation passed; see [PRIVATE_CHAT.md](PRIVATE_CHAT.md). Speech input/read-aloud are not implemented.
+
 ## Requested follow-up: saved chat library
 
 Application `ee3204a8` is deployed locally at the user's request. Acceptance: New preserves old chats; searchable library opens, renames and confirms deletion; messages, generated outputs, requested models and drafts survive reopening/refresh; existing single chat migrates once; opening never runs inference; storage failure and competing tabs cannot silently discard history; uploads/references remain explicitly temporary; controls fit mobile keyboard layouts. CPU/browser checks and live deployment checks passed as recorded in [CHAT_THREADS.md](CHAT_THREADS.md). Server archives, synchronization and import are outside this increment.

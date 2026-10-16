@@ -600,7 +600,7 @@ async function loadChatModels() {
 $("chat-model").onchange = () => {
   if (!threadsReady || threadTransition || busy) return;
   conversationModel = $("chat-model").value;
-  store.set("chatModel", conversationModel);
+  if (!isPrivateChat()) store.set("chatModel", conversationModel);
   saveChat();
   loadChatModels();
 };
@@ -626,12 +626,15 @@ let activeThread = null, threadsReady = false, threadTransition = false;
 let threadQueue = Promise.resolve(true), draftTimer;
 const threadRevisions = new Map();
 function currentThreadId() { return activeThread?.id; }
+function isPrivateChat() { return activeThread?.private === true; }
 function threadError(error) {
   $("thread-storage-error").hidden = false;
   $("thread-storage-error").textContent = `Chat not saved: ${error.message}. Keep this page open and export your chat before reloading.`;
 }
 function saveChat() {
   if (!threadsReady || !activeThread) return Promise.resolve(false);
+  // Do not queue private data, including compatibility copies in localStorage.
+  if (isPrivateChat()) return Promise.resolve(true);
   const snapshot = {...activeThread, messages:StrataThreads.clean(messages), model:conversationModel, draft:$("input").value};
   const pending = threadQueue.then(async () => {
     try {
@@ -650,16 +653,22 @@ function saveChat() {
   threadQueue = pending;
   return pending;
 }
-function installThread(record) {
+function installThread(record, preserveInputs = false) {
+  if (isPrivateChat() && activeThread.id !== record.id) StrataChatImages.discardPrivate();
   activeThread = record; threadRevisions.set(record.id, record.revision);
   messages = record.messages; conversationModel = record.model;
   StrataChatImages.recover(messages);
   $("input").value = record.draft || "";
-  attachments = []; chatReferences.splice(0);
-  store.set("activeThread", record.id); store.set("chatModel", conversationModel);
-  try { sessionStorage.setItem("strata.activeThread", record.id); } catch (_) {}
-  store.set("chat", StrataThreads.clean(messages));
-  $("thread-title").textContent = record.title;
+  if (!preserveInputs) { attachments = []; chatReferences.splice(0); }
+  if (!isPrivateChat()) {
+    store.set("activeThread", record.id); store.set("chatModel", conversationModel);
+    try { sessionStorage.setItem("strata.activeThread", record.id); } catch (_) {}
+    store.set("chat", StrataThreads.clean(messages));
+  }
+  $("thread-title").textContent = isPrivateChat() ? "Private chat · not saved" : record.title;
+  $("private-chat").checked = isPrivateChat();
+  $("private-chat-status").hidden = !isPrivateChat();
+  $("threads-btn").textContent = isPrivateChat() ? "Chats · Private" : "Chats";
   $("thread-storage-error").hidden = true;
   renderChatReferences(); renderAttachments(); renderChat(); autosize(); loadChatModels();
 }
@@ -669,14 +678,42 @@ function canChangeThread() {
   }
   return true;
 }
-async function changeThread(id = null) {
+function confirmPrivateDiscard() {
+  if (!isPrivateChat() || (!messages.length && !$("input").value && !attachments.length && !chatReferences.length)) return Promise.resolve(true);
+  const dialog = $("private-discard-dialog"); dialog.returnValue = "cancel";
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "discard"), {once:true});
+    dialog.showModal();
+  });
+}
+async function setPrivateChat(enabled) {
+  $("private-chat").checked = isPrivateChat();
+  if (enabled === isPrivateChat() || !canChangeThread()) return;
+  if (!enabled) { await changeThread(null, false); return; }
+  threadTransition = true; clearTimeout(draftTimer); setBusy(false);
+  try {
+    // Drain snapshots taken before activation; never flush the current draft on activation.
+    await threadQueue;
+    const record = {...StrataThreads.fresh(conversationModel), private:true,
+      messages:structuredClone(messages), draft:$("input").value};
+    await StrataChatImages.retainPrivate(record.messages);
+    installThread(record, true);
+    toast("info", "Private chat", "New content stays in this tab. Earlier saved copies remain in Chats.", 8000);
+  } catch (error) { threadError(error); }
+  finally { threadTransition = false; setBusy(false); }
+}
+$("private-chat").onchange = () => setPrivateChat($("private-chat").checked);
+async function changeThread(id = null, privateMode = isPrivateChat()) {
   if (!canChangeThread()) return;
   threadTransition = true; clearTimeout(draftTimer); setBusy(false);
   try {
+    if (!await confirmPrivateDiscard()) return;
     if (!await saveChat()) return;
     const record = id ? await StrataThreads.get(id) : StrataThreads.fresh();
     if (!record) throw new Error("That chat was deleted in another tab. Refresh the library");
-    if (!id) {
+    if (!id && privateMode) {
+      installThread({...record, private:true});
+    } else if (!id) {
       const saved = await StrataThreads.save(record, 0);
       installThread(saved);
     } else installThread(record);
@@ -722,7 +759,7 @@ function renderThreadList() {
     }
     row.append(actions); list.append(row);
   }
-  $("threads-status").textContent = list.children.length ? `${list.children.length} chats` : "No chats match.";
+  $("threads-status").textContent = (list.children.length ? `${list.children.length} chats` : "No chats match.") + (isPrivateChat() ? " Current private chat is not saved or listed." : "");
 }
 async function refreshThreads() {
   try { await threadQueue; libraryRecords = await StrataThreads.list(); renderThreadList(); }
@@ -1084,6 +1121,7 @@ function assistantMessages(m) {
 function setBusy(on) {
   $("input").disabled = threadTransition || !threadsReady;
   $("new-btn").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
+  $("private-chat").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("chat-model").disabled = on || threadTransition || !threadsReady;
   $("chat-model-settings").disabled = on;
   $("stop-btn").hidden = !on;
@@ -1097,7 +1135,7 @@ async function send() {
   if ((!text && !attachments.length) || busy || attachmentReads || threadTransition || !threadsReady) return;
   if (modelSelection && !conversationModel) {
     conversationModel = modelSelection.default_model;
-    store.set("chatModel", conversationModel);
+    if (!isPrivateChat()) store.set("chatModel", conversationModel);
   }
   let imageRequest;
   if (health.chat_image_generation && $("chat-image-enabled").checked && health.chat_image_editing) {
@@ -1234,6 +1272,14 @@ function autosize() {
 $("input").addEventListener("input", autosize);
 $("input").addEventListener("input", () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveChat, 350); });
 document.addEventListener("visibilitychange", () => { if (document.hidden && threadsReady && !threadTransition) saveChat(); });
+window.addEventListener("pagehide", () => {
+  if (!isPrivateChat()) return;
+  clearTimeout(draftTimer); StrataChatImages.discardPrivate();
+  busy?.controller.abort(); messages = []; activeThread.messages = [];
+  activeThread.draft = ""; $("input").value = "";
+  attachments = []; chatReferences.splice(0);
+  renderChat(); renderAttachments(); renderChatReferences();
+});
 
 $("new-btn").onclick = () => changeThread();
 $("export-btn").onclick = () => {

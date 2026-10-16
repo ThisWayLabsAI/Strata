@@ -42,7 +42,8 @@
   <!-- ============================ Chat ============================ -->
   <section class="view view--chat" id="view-chat" role="tabpanel" aria-labelledby="tab-btn-chat">
     <div class="chat-scroll" id="chat-scroll">
-      <div id="thread-title" class="thread-title"></div>
+      <div class="thread-heading"><span id="thread-title" class="thread-title"></span><label class="private-toggle"><input id="private-chat" type="checkbox" aria-describedby="private-chat-status">Private chat</label></div>
+      <p id="private-chat-status" class="muted small" hidden>Private: chat, draft and generated images stay in this tab's memory. Leaving or reloading discards them. Earlier saved copies remain in Chats. Server/tool logging still applies; downloads and exports are saved when you choose them.</p>
       <p id="thread-storage-error" role="alert" hidden></p>
       <div class="chat" id="chat">
         <div class="chat-empty" id="chat-empty">
@@ -71,7 +72,7 @@
           <p id="chat-image-guidance" class="muted small" role="status"></p>
           <p class="muted small">Reference inputs are temporary; reattach or select a saved output after refresh. Chat edits affect the whole image. Use Images for brush selection and local pixel protection. Camera changes remain experimental.</p>
         </div>
-        <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message"></textarea>
+        <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message" autocomplete="off"></textarea>
         <div class="st-composer__bar">
           <button type="button" class="st-btn st-btn--icon" id="attach-btn" title="Attach a text file (or drop it here)" aria-label="Attach a file">
             <svg class="st-icon"><use href="web/sprite.svg#i-attach"/></svg></button>
@@ -405,6 +406,11 @@
   </form>
 </dialog>
 <script src="web/chat-threads.js"></script>
+<dialog id="private-discard-dialog" aria-labelledby="private-discard-title">
+  <h2 id="private-discard-title">Leave private chat?</h2>
+  <p>This discards this tab's private messages, draft and generated images. Export or download anything you want to keep first. Earlier saved copies remain in Chats.</p>
+  <form method="dialog"><button class="st-btn" value="cancel" autofocus>Keep private chat</button><button class="st-btn" value="discard">Discard private chat</button></form>
+</dialog>
 <script src="web/chat-images.js"></script>
 <script src="web/app.js"></script>
 <script src="web/image-references.js"></script>

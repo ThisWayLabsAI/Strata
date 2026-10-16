@@ -2,6 +2,7 @@
 (() => {
   "use strict";
   const cache = new Map(), loading = new Map(), ACTIVE = ["queued", "preparing", "generating", "restoring"];
+  const privateImages = new Set();
   const labels = {queued:"Image queued", preparing:"Preparing GPU", generating:"Generating image", restoring:"Releasing GPU / restoring chat",
     completed:"Image ready", cancelled:"Image cancelled", failed:"Image failed", interrupted:"Image request interrupted"};
   let database;
@@ -49,9 +50,9 @@
       `<div class="chat-image-state" role="status">${esc(labels[image.state] || "Image result")}${image.step != null ? ` · ${esc(image.step)}/${esc(image.steps)} steps` : ""}</div>` +
       (complete ? `<img class="chat-image-preview" alt="${esc(recipe.prompt)}" hidden>` +
         `<p class="muted small">${esc(recipe.size)} · seed ${esc(recipe.seed)}</p>` +
-        `<p class="chat-image-storage muted small">${image.persisted ? "Saved in this browser" : "Not saved in this browser — download to keep it."}</p>` +
+        `<p class="chat-image-storage muted small">${image.private ? "Private chat — memory only. Download to keep it." : image.persisted ? "Saved in this browser" : "Not saved in this browser — download to keep it."}</p>` +
         `<div class="img-template-actions"><button type="button" class="st-btn st-btn--secondary" data-chat-image-download disabled>${image.embedded ? "Download PNG + recipe" : "Download PNG"}</button>` +
-        `<button type="button" class="st-btn st-btn--secondary" data-chat-image-template>Use as template</button>` +
+        `<button type="button" class="st-btn st-btn--secondary" data-chat-image-template ${image.private ? 'disabled title="Private image recipes stay in this chat"' : ""}>Use as template</button>` +
         `<button type="button" class="st-btn st-btn--secondary" data-chat-image-reference ${health.chat_image_editing ? "" : "hidden"}>Edit this image</button></div>` +
         `<details><summary>Generation recipe</summary><pre class="tool-call__pre">${esc(JSON.stringify(recipe, null, 2))}</pre></details>` : "") +
       (image.error ? `<p class="chat-image-error">${esc(image.error)}</p>` : "") +
@@ -67,7 +68,7 @@
         const following = mobileChat && followLatest;
         const [width,height] = image.recipe.size.split("x").map(Number);
         preview.width = width; preview.height = height;
-        preview.onerror = () => { preview.hidden = true; card.querySelector(".chat-image-storage").textContent = "Preview unavailable. Download the PNG to inspect it. " + (image.persisted ? "Saved in this browser." : "Not saved — download before leaving."); };
+        preview.onerror = () => { preview.hidden = true; card.querySelector(".chat-image-storage").textContent = "Preview unavailable. Download the PNG to inspect it. " + (image.private ? "Private chat — memory only." : image.persisted ? "Saved in this browser." : "Not saved — download before leaving."); };
         preview.src = url(record); preview.hidden = false;
         if (following) scrollDown(true);
         card.querySelector("[data-chat-image-download]").disabled = false;
@@ -76,6 +77,7 @@
     }
   }
   async function onEvent(message, event) {
+    const privateChat = isPrivateChat();
     if (!event || typeof event.id !== "string" || !/^[a-f0-9]{32}$/.test(event.job_id) || !Number.isSafeInteger(event.sequence) || event.sequence < 1) return;
     message.tools ||= [];
     let tool = message.tools.find(tool => tool.id === event.id);
@@ -86,7 +88,7 @@
       return;
     }
     if (tool.image?.state === "completed" || !Object.hasOwn(labels, event.state)) return;
-    const image = tool.image = {id:event.job_id,state:event.state,sequence:event.sequence,error:event.error};
+    const image = tool.image = {id:event.job_id,state:event.state,sequence:event.sequence,error:event.error, ...(privateChat ? {private:true} : {})};
     if (event.state === "generating" && Number.isInteger(event.step) && Number.isInteger(event.steps) && event.step >= 0 && event.step <= event.steps && event.steps <= 100) {
       image.step = event.step; image.steps = event.steps;
     }
@@ -102,7 +104,10 @@
         catch (error) { image.warning = "Image created, but its recipe could not be embedded: " + error.message; }
         const record = {id:image.id, messageId:message.id, blob:new Blob([bytes], {type:"image/png"}), recipe:image.recipe};
         cache.set(image.id, {...record});
-        try { await transaction("readwrite", store => store.put(record)); image.persisted = true; }
+        try {
+          if (privateChat) { privateImages.add(image.id); image.persisted = false; }
+          else { await transaction("readwrite", store => store.put(record)); image.persisted = true; }
+        }
         catch (error) { image.persisted = false; image.storageError = "Not saved in this browser. Download the image before leaving: " + error.message; toast("warn", "Image not saved", image.storageError, 8000); }
       } catch (error) { image.state = "failed"; image.error = "Could not read the generated result: " + error.message; }
     }
@@ -137,7 +142,10 @@
         if (chatReferences.length) throw new Error("Remove current references before choosing a new edit source.");
         selectChatReference(data, filename(id)); $("chat-image-operation").value = "edit"; renderChatReferences(); $("input").focus();
       }
-      else if (button.hasAttribute("data-chat-image-template")) applyImageTemplate(image.recipe);
+      else if (button.hasAttribute("data-chat-image-template")) {
+        if (image.private) throw new Error("Private image recipes stay in this chat. Export or download explicitly to keep them.");
+        applyImageTemplate(image.recipe);
+      }
       else {
         const record = await get(id), link = document.createElement("a"); link.href = url(record); link.download = filename(id); link.click();
       }
@@ -147,7 +155,9 @@
   async function remove(ids) {
     for (const id of ids) {
       if (loading.has(id)) { try { await loading.get(id); } catch (_) { /* missing records can still be deleted */ } }
-      const record = cache.get(id); if (record?.url) URL.revokeObjectURL(record.url); cache.delete(id);
+      if (!privateImages.has(id)) {
+        const record = cache.get(id); if (record?.url) URL.revokeObjectURL(record.url); cache.delete(id);
+      }
       try { await transaction("readwrite", store => store.delete(id)); }
       catch (error) { toast("warn", "Could not delete a saved image", error.message + ". Clear this site's browser storage to remove it."); }
     }
@@ -158,5 +168,20 @@
       "```json\n" + JSON.stringify(tool.image.recipe, null, 2) + "\n```\n").join("");
   }
   function recover(messages) { messages.forEach(message => finish(message, false)); }
-  globalThis.StrataChatImages = {html, decorate, onEvent, finish, action, remove, exported, recover, get, filename};
+  async function retainPrivate(messages) {
+    for (const message of messages) for (const tool of message.tools || []) if (tool.image) {
+      const image = tool.image; image.private = true; delete image.storageError;
+      if (image.state === "completed") {
+        try { await get(image.id); privateImages.add(image.id); } catch (_) { /* Existing missing images stay unavailable. */ }
+      }
+    }
+  }
+  function discardPrivate() {
+    for (const id of privateImages) {
+      const record = cache.get(id); if (record?.url) URL.revokeObjectURL(record.url);
+      cache.delete(id);
+    }
+    privateImages.clear();
+  }
+  globalThis.StrataChatImages = {html, decorate, onEvent, finish, action, remove, exported, recover, get, filename, retainPrivate, discardPrivate};
 })();

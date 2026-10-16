@@ -74,6 +74,7 @@
     request.onsuccess = () => done(request.result || null);
   });
   async function save(snapshot, expectedRevision) {
+    if (snapshot.private) throw new Error("Private chats cannot be written to the library");
     const record = {...clone(snapshot), messages:clean(snapshot.messages)};
     return transaction("readwrite", (tx,done,fail) => {
       const request = tx.objectStore("threads").get(record.id);

@@ -1,5 +1,7 @@
 # Saved chat threads
 
+The follow-up [Private chat](PRIVATE_CHAT.md) toggle keeps the current conversation in memory and bypasses browser saving. Earlier saved copies remain in the library until explicitly deleted.
+
 Application `ee3204a8`, based on `7a2137ab`, is deployed locally in `C:\AI\Strata` on stable `thiswaylabs` at the user's request. Refresh the app and open **Chats** to test. GitHub publication remains pending authentication.
 
 The header's **Chats** button opens a searchable library. **New chat** saves the current conversation before creating another. Open a saved title to continue, rename it, or explicitly confirm deletion. Each record holds messages, tool results, actual response model identities, requested model and text draft. Titles start with the first user message; custom names survive later saves. The library lists recently saved chats first. Opening a thread only restores browser state; model loading happens on Send.

@@ -345,7 +345,14 @@ html[data-chat-compact="true"] #chat-model-row:not([hidden]) {
 }
 html[data-chat-compact="true"] #chat-model-row:not([data-open="true"]) { display: none; }
 
-.thread-title, #thread-storage-error { max-width: 850px; margin: 12px auto; padding: 0 16px; overflow-wrap: anywhere; }
+.thread-heading, #thread-storage-error, #private-chat-status { max-width: 850px; margin: 12px auto; padding: 0 16px; overflow-wrap: anywhere; }
+.thread-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.thread-title { flex: 1; min-width: 0; }
+.private-toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.private-toggle input { width: 18px; height: 18px; }
+#private-discard-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--st-line); border-radius: 12px; background: var(--st-bg); color: var(--st-ink); }
+#private-discard-dialog button { min-height: 44px; }
+#private-discard-dialog::backdrop { background: #0008; }
 .thread-title { font-size: 0.85rem; color: var(--st-ink-muted); }
 #thread-storage-error { color: var(--st-danger, #b42318); }
 #threads-dialog { box-sizing: border-box; width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 16px; border: 1px solid var(--st-line); border-radius: 12px; color: var(--st-ink); background: var(--st-bg); }
