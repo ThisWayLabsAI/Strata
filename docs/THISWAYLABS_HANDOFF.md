@@ -2,6 +2,10 @@
 
 Updated 2026-10-17. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Upstream integration candidate published; native gate waiting for Windows UAC
+
+Branch `update/upstream-0.1.45-20261017` merges pinned upstream `477ac13c` and fixes the tokenizer-bound cache/model-family switch and rollback. Saved sampling is preserved explicitly; new/reset settings use upstream defaults. [Draft PR #2](https://github.com/ThisWayLabsAI/Strata/pull/2) is published; [the integration record](UPSTREAM_INTEGRATION_2026-10-17.md) contains test/build evidence and the resume command. CUDA 13.3 sm_86 portable engine 0.1.45 built separately; 444 upstream Python tests, real-tokenizer checks, focused registry/sampling and browser regressions, and all 15 CPU state/cache tests passed. No native GPU gate has run. The existing Stop helper is waiting at Windows UAC (exec session 87867); verify its report and zero live/dev listeners/native workers before testing. Live remains at `c3af2e08` with its previous engine and unchanged configs. The native gate must complete before stable merge/deployment; restore live through the existing task even if it fails. Stop/config/engine backups: `Strata-data\backups\upstream-sync-20261017-1`. Logs/build scripts: `Strata-data\logs\upstream-integration-20261017`. CPU fixture servers and browsers are closed.
+
 ## Upstream strategy documented and candidate assessed, 2026-10-17
 
 [FORK_WORKFLOW.md](FORK_WORKFLOW.md) is now the repository's maintenance policy; the external controls workflow points to it. Authentication is working. Before this documentation update, dev/live/remote stable matched `8fd8ed7c`; every local feature-branch tip was reachable from remote stable. The documentation follow-up is also published and synchronized to live without restart. Runtime application remains `2c1ae3ca`, with local `mcp.max_rounds=16`; no upstream runtime/native/config/package changes were deployed.

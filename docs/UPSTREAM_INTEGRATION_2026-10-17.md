@@ -1,5 +1,7 @@
 # Upstream 0.1.45 integration, 2026-10-17
 
+Current state: candidate branch is published in [draft PR #2](https://github.com/ThisWayLabsAI/Strata/pull/2). Native testing is waiting for the existing elevated Stop helper's Windows UAC prompt. Live remains on stable `c3af2e08` with its old engine; no candidate GPU server has started. Confirm stop-helper completion and zero listeners/native workers before running `tools/model_switch_smoke.py --engine C:/AI/Strata-data/build/upstream-0.1.45-sm86/strata.exe`. Restore live through its scheduled task after the gate, including on failure.
+
 The integration branch merges upstream `477ac13cbe8e582c20484871ce459d20d82df09d` into stable base `c3af2e08`, preserving the fork's published history. The earlier [assessment](UPSTREAM_REVIEW_2026-10-17.md) records the 264 upstream commits and user-relevant enhancements. This record tracks integration checks and deployment separately.
 
 ## Compatibility fixes
@@ -15,6 +17,6 @@ Upstream server/reasoning/frontend/prompt-tokenizer tests passed: 444 tests, wit
 
 Mobile composer, image toggle and Options suites passed at 320x568, 390x844, 844x390, 1280x844, 390x300 and 320x256 (410 assertions). Saved threads (26), chat reference editing (23), private mode (21), model selection (26) and sampling Apply/Reset (4) passed, plus real reload preserving explicit 0.6. Browser errors were empty. Initial thread tests rejected the wrong fixture port before mutation and were rerun on their required CPU fixture 8092.
 
-Native build: separate portable CUDA engine version 0.1.45, sm_86, CUDA 13.3, MSVC 14.44, Ninja, Q6_K experts/MMQ enabled, no optional performance flags requested. Build output: `Strata-data\build\upstream-0.1.45-sm86`. Existing vision source is unchanged by the upstream merge; keep the installed GPU vision encoder and validate it in the native gate. HIP/SYCL/Metal toolchains/hardware are not installed here and were not locally built; the fork changes on top of upstream are Python/browser/test code.
+Native build: separate portable CUDA engine version 0.1.45, sm_86, CUDA 13.3, MSVC 14.44, Ninja, Q6_K experts/MMQ enabled, no optional performance flags requested. Build output: `Strata-data\build\upstream-0.1.45-sm86`. All 15 standalone CPU state/cache tests passed in a separate non-CUDA build after building every registered target. Existing vision source is unchanged by the upstream merge; keep the installed GPU vision encoder and validate it in the native gate. HIP/SYCL/Metal toolchains/hardware are not installed here and were not locally built; the fork changes on top of upstream are Python/browser/test code.
 
 Evidence: `Strata-data\logs\upstream-integration-20261017`. Backups of all four configs and the live engine/metadata are in `Strata-data\backups\upstream-sync-20261017-1`. Keys, models, configs, controls and scheduled-task settings remain outside Git. Native GPU validation and deployment results must be recorded before describing this candidate as deployed.
