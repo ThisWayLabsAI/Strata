@@ -1,17 +1,32 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let selected = null, detail = null, pane = "input", records = [], state = null, operating = false, stamp = "", actionError = "";
-let apiKey = sessionStorage.getItem("strata.monitor.key") || "";
-document.documentElement.dataset.theme = localStorage.getItem("strata.theme") || "dark";
+function storedApiKey() {
+  try {
+    const shared = localStorage.getItem("strata.apikey");
+    if (shared !== null) {
+      try {
+        const value = JSON.parse(shared);
+        return typeof value === "string" ? value : "";
+      } catch (_) { return ""; }
+    }
+  } catch (_) { /* Storage may be unavailable; keep manual entry usable. */ }
+  try { return sessionStorage.getItem("strata.monitor.key") || ""; } catch (_) { return ""; }
+}
+let apiKey = storedApiKey();
+$("api-key").value = apiKey;
+document.documentElement.dataset.theme = "dark";
+try { document.documentElement.dataset.theme = localStorage.getItem("strata.theme") || "dark"; } catch (_) {}
 const seconds = n => typeof n === "number" ? `${n.toFixed(2)} s` : "—";
 const speed = n => typeof n === "number" ? n.toFixed(1) : "—";
 const active = r => !["completed", "error", "disconnected"].includes(r.state);
 function text(id, value) { const el = $(id); if (el.textContent !== String(value)) el.textContent = value; }
 async function api(path, body) {
-  const response = await fetch(path, {cache:"no-store", headers:{...(apiKey ? {Authorization:`Bearer ${apiKey}`} : {}), ...(body !== undefined ? {"Content-Type":"application/json"} : {})}, ...(body !== undefined ? {method:"POST", body:JSON.stringify(body)} : {})});
+  const key = apiKey;
+  const response = await fetch(path, {cache:"no-store", headers:{...(key ? {Authorization:`Bearer ${key}`} : {}), ...(body !== undefined ? {"Content-Type":"application/json"} : {})}, ...(body !== undefined ? {method:"POST", body:JSON.stringify(body)} : {})});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401) $("auth").hidden = false;
+    if (response.status === 401 && key === apiKey) $("auth").hidden = false;
     throw new Error(value.error?.message || `HTTP ${response.status}`);
   }
   return value;
@@ -57,8 +72,9 @@ function content() {
 async function showDetail() {
   if (!selected) return;
   const id = selected;
+  const key = apiKey;
   const value = await api(`/api/requests?id=${encodeURIComponent(id)}`);
-  if (selected !== id) return;
+  if (selected !== id || key !== apiKey) return;
   detail = value; $("selection").hidden = false; $("no-selection").hidden = true;
   text("detail-title", `${value.id} · ${value.path}`);
   text("detail-status", value.state); $("detail-status").className = `tag ${value.state}`;
@@ -71,8 +87,10 @@ async function showDetail() {
   $("detail-error").hidden = !value.error; text("detail-error", value.error?.message || ""); content();
 }
 async function refresh() {
+  const key = apiKey;
   try {
     const [status, history] = await Promise.all([api("/v1/status"), api("/api/requests")]);
+    if (key !== apiKey) return;
     state = status; records = history.requests;
     status.loaded = history.loaded; status.auto_load = history.auto_load;
     if (selected && !records.some(r => r.id === selected)) {
@@ -88,9 +106,10 @@ async function refresh() {
     text("wall", last ? seconds(last.wallclock_s) : "—"); text("speed", speed(last?.timings?.predicted_per_second));
     $("load").disabled = operating || Boolean(inflight) || status.loaded; $("unload").disabled = operating || Boolean(inflight) || !status.loaded;
     list(); if (selected) await showDetail();
+    if (key !== apiKey) return;
     text("updated", `Live · updated ${new Date().toLocaleTimeString()}`);
     if (!operating) notice(actionError);
-  } catch (error) { notice(error.message); text("updated", "Disconnected · retrying"); $("load").disabled = $("unload").disabled = true; }
+  } catch (error) { if (key !== apiKey) return; notice(error.message); text("updated", "Disconnected · retrying"); $("load").disabled = $("unload").disabled = true; }
 }
 async function control(load) {
   actionError = "";
@@ -102,8 +121,21 @@ async function control(load) {
 }
 $("load").onclick = () => control(true); $("unload").onclick = () => control(false);
 $("key").onclick = () => { $("auth").hidden = !$("auth").hidden; if (!$("auth").hidden) $("api-key").focus(); };
-$("auth").onsubmit = async event => { event.preventDefault(); apiKey = $("api-key").value.trim(); sessionStorage.setItem("strata.monitor.key", apiKey); $("auth").hidden = true; await refresh(); };
-$("theme").onclick = () => { const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = theme; localStorage.setItem("strata.theme", theme); };
+$("auth").onsubmit = async event => {
+  event.preventDefault(); apiKey = $("api-key").value.trim();
+  try { localStorage.setItem("strata.apikey", JSON.stringify(apiKey)); } catch (_) {}
+  try { sessionStorage.setItem("strata.monitor.key", apiKey); } catch (_) {}
+  $("auth").hidden = true; await refresh();
+};
+window.addEventListener("storage", async event => {
+  if (event.storageArea !== localStorage || (event.key !== "strata.apikey" && event.key !== null)) return;
+  // An explicit removal/clear must not revive the monitor's old tab-only key.
+  try { sessionStorage.removeItem("strata.monitor.key"); } catch (_) {}
+  apiKey = storedApiKey();
+  $("api-key").value = apiKey; $("auth").hidden = true;
+  await refresh();
+});
+$("theme").onclick = () => { const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = theme; try { localStorage.setItem("strata.theme", theme); } catch (_) {} };
 $("search").oninput = list; $("filter").onchange = list;
 document.querySelectorAll("[data-pane]").forEach(button => { button.onclick = () => { pane = button.dataset.pane; document.querySelectorAll("[data-pane]").forEach(b => b.setAttribute("aria-selected", String(b === button))); content(); }; });
 $("copy").onclick = async () => { try { await navigator.clipboard.writeText($("content").textContent); text("copy", "Copied"); setTimeout(() => text("copy", "Copy"), 1500); } catch (_) { notice("Clipboard unavailable; select the text to copy it."); } };
