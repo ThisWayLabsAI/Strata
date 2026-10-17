@@ -2,6 +2,12 @@
 
 Updated 2026-10-16. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Tool-round fix: implemented; coordinated activation pending
+
+Application `2c1ae3ca` on `thiswaylabs` implements a final answer pass without tools after the last allowed round, preserving the collected results and keeping further tool execution bounded. The chat footer describes the final pass. All 45 MCP/chat-image mock tests passed, including 16 rounds, errors, cancellation at the limit and image lifecycle; syntax/diff checks passed. See [TOOL_ROUND_LIMIT.md](TOOL_ROUND_LIMIT.md). Live remains at `ba15b07a` until the coordinated stop/source/config/restart gate completes. The four live/dev configs are backed up locally; only `mcp.max_rounds=16` is intended to change. The elevated existing stop control has been requested; verify completion and zero live/native processes before deploying. Bundle/config backups: `Strata-data\backups\mcp-budget-deploy-20261016`; test log: `Strata-data\logs\mcp-budget-20261016`.
+
+GitHub status checked 2026-10-16: authentication now succeeds, but the recent work has only been committed locally. Remote `thiswaylabs` remains at `296b59d2`; there were 41 local stable commits ahead before this fix (42 after the application commit). No remote push was performed as part of the user's status question. Do not describe publication as complete or still blocked on authentication. Keys/config backups remain ignored and local. Camera changes remain experimental.
+
 ## Current release: mobile Images toggle deployed
 
 Application `4dd20f95` is deployed locally in `C:\AI\Strata`. The user chose Attach, Images, New chat, Options. Images reuses the existing opt-in, with accent/checkmark, pressed state and on/off tooltip. Details remain in Options; Sampling and thinking moves there on mobile. Desktop retains its original controls. Six-size CPU checks passed: 126 image-toggle, 126 composer and 158 Options assertions, plus 21 private-chat checks (431 total). Dark/light screenshots were inspected; browser errors were empty. See [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md).
