@@ -75,7 +75,7 @@
           <p id="chat-image-guidance" class="muted small" role="status"></p>
           <p class="muted small">Reference inputs are temporary; reattach or select a saved output after refresh. Chat edits affect the whole image. Use Images for brush selection and local pixel protection. Camera changes remain experimental.</p>
         </div>
-        <div class="mobile-composer-actions"><button type="button" class="st-btn st-btn--secondary" id="chat-options-new">New chat</button><button type="button" class="st-btn st-btn--secondary" id="chat-options-export">Export chat</button></div>
+        <div class="mobile-composer-actions"><button type="button" class="st-btn st-btn--secondary" id="chat-options-export">Export chat</button></div>
         </div>
         <div class="attachments" id="attachments" hidden></div>
         <textarea id="input" rows="2" placeholder="Ask anything&hellip;" aria-label="Message" autocomplete="off"></textarea>
@@ -83,10 +83,10 @@
           <button type="button" class="st-btn st-btn--icon" id="attach-btn" title="Attach a text file (or drop it here)" aria-label="Attach a file">
             <svg class="st-icon"><use href="web/sprite.svg#i-attach"/></svg></button>
           <button type="button" class="st-btn st-btn--secondary" id="chat-model-settings" aria-label="Model settings" aria-controls="chat-model-row" aria-expanded="false" hidden>Model</button>
-          <button type="button" class="st-btn st-btn--secondary" id="composer-options-toggle" aria-controls="chat-options" aria-expanded="false">Options</button>
           <input type="file" id="file" multiple hidden>
           <button type="button" class="st-btn st-btn--icon" id="new-btn" title="New chat" aria-label="New chat">
             <svg class="st-icon"><use href="web/sprite.svg#i-new-chat"/></svg></button>
+          <button type="button" class="st-btn st-btn--icon" id="composer-options-toggle" title="Chat options" aria-label="Chat options" aria-controls="chat-options" aria-expanded="false"><svg class="st-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h7m4 0h5M4 17h3m4 0h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>
           <button type="button" class="st-btn st-btn--icon" id="export-btn" title="Save this chat as Markdown" aria-label="Save this chat">
             <svg class="st-icon"><use href="web/sprite.svg#i-download"/></svg></button>
           <button type="button" class="st-btn st-btn--icon" id="sampling-btn" title="Sampling and thinking" aria-label="Sampling and thinking">

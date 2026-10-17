@@ -17,7 +17,11 @@
   $("composer-expand").click(); $("composer-options-toggle").click(); await settle();
   const options=$("chat-options").getBoundingClientRect();
   check(options.top>=0&&options.bottom<=innerHeight&&visible($("chat-image-enabled")),"Options panel is visible and bounded by the viewport");
-  check(visible($("chat-options-new"))&&visible($("chat-options-export")),"New and Export remain available in Options");
+  check(visible($("new-btn"))&&!$("chat-options").contains($("new-btn"))&&visible($("chat-options-export")),"New chat stays in the toolbar; Export remains in Options");
+  const toolbarIds=["attach-btn","new-btn","composer-options-toggle","sampling-btn","composer-collapse","send-btn"];
+  const bounds=toolbarIds.map(id=>$(id).getBoundingClientRect());
+  check(bounds.every((r,i)=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&(!i||r.left>=bounds[i-1].right)),"Toolbar icons have separate 44px targets in the intended order");
+  check($("composer-options-toggle").getAttribute("aria-label")==="Chat options"&&!$("composer-options-toggle").textContent.trim()&&!!$("composer-options-toggle").querySelector("svg"),"Options uses an accessible icon without a text label");
   $("chat-image-enabled").checked=true; $("chat-image-settings").setAttribute("aria-expanded","true"); renderChatReferences();
   check(!$("chat-image-inputs").hidden&&$("chat-image-browse-file").textContent==="Choose image","Image options expose a shorter Choose image action");
   const label=$("chat-image-operation").closest("label").getBoundingClientRect(),browse=$("chat-image-browse-file").getBoundingClientRect();

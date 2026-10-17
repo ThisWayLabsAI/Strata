@@ -646,7 +646,6 @@ function closeChatOptions() {
 }
 $("chat-options-close")?.addEventListener("click", closeChatOptions);
 $("chat-options-backdrop")?.addEventListener("click", closeChatOptions);
-$("chat-options-new").onclick = () => $("new-btn").click();
 $("chat-options-export").onclick = () => $("export-btn").click();
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("chat-options").dataset.open === "true") {
@@ -1195,7 +1194,6 @@ function setBusy(on) {
   $("send-btn").hidden = on;
   document.documentElement.dataset.chatBusy = String(on);
   $("composer-expand").disabled = threadTransition || !threadsReady;
-  $("chat-options-new").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("send-btn").disabled = on || attachmentReads > 0 || threadTransition || !threadsReady;
   $("composer-hint").textContent = attachmentReads ? "Reading image…" : on ? "" : "Shift+Enter: new line";
   renderChatReferences(); renderAttachments();

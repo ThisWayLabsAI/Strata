@@ -1,5 +1,11 @@
 # Mobile composer and control spacing
 
+## Mobile toolbar follow-up, 2026-10-16
+
+The expanded mobile toolbar now places the existing New chat icon between Attach and Chat options. Options uses a sliders icon with an accessible label/title and retains its active accent. New is removed from the Options panel; Export remains there. All existing New chat guards and private-mode behavior are retained: New confirms discarding private contents and stays private. The compact reading row and desktop controls retain their existing behavior.
+
+CPU browser checks passed at 320x568, 390x844, 844x390, 1280x844, 390x300 and 320x256: 126 composer/toolbar assertions and 158 Options surface assertions, plus 21 private-chat checks. Toolbar checks cover icon order, separate 44px targets, viewport bounds and accessible Options labeling. The dark 390px screenshot was inspected and browser errors were empty. Evidence: `Strata-data\logs\mobile-toolbar-20261016`. No GPU, backend, config or storage changes.
+
 ## Options surface follow-up
 
 Application `65bddf1a` is deployed locally in `C:\AI\Strata` through the compatible static-file path, with the same server PID. Served asset hashes, health and four preserved config hashes passed. An isolated live mobile browser verified close/outside-tap dismissal and draft preservation; browser errors were empty. The inspected live screenshot is `Strata-data\logs\mobile-options-surface-20261015\live-dark-390.png`. Temporary authentication was removed after closing the browser. Rollback: `rollback/pre-options-surface-20261015` at `850b2ac4`.

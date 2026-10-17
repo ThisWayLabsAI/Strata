@@ -386,9 +386,9 @@ html[data-chat-compact="true"] #chat-model-row:not([data-open="true"]) { display
 }
 html[data-mobile-chat="true"] #composer-options-toggle,
 html[data-mobile-chat="true"] #composer-collapse { display: inline-flex; min-height: 44px; }
-html[data-mobile-chat="true"] #composer-options-toggle { padding-inline: 10px; }
+html[data-mobile-chat="true"] #composer-options-toggle,
+html[data-mobile-chat="true"] #composer #new-btn { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
 html[data-mobile-chat="true"] #composer .st-composer__bar { gap: 4px; flex-wrap: nowrap; }
-html[data-mobile-chat="true"] #composer #new-btn,
 html[data-mobile-chat="true"] #composer #export-btn,
 html[data-mobile-chat="true"] #composer #chat-model-settings { display: none; }
 html[data-mobile-chat="true"] #chat-options { display: none; }
