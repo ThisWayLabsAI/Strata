@@ -96,6 +96,11 @@ function headers(json = false) {
 }
 $("api-key").value = store.get("apikey", "");
 $("api-key").onchange = () => { store.set("apikey", $("api-key").value.trim()); toast("success", "API key saved", "Kept in this browser only."); };
+window.addEventListener("storage", event => {
+  if (event.storageArea === localStorage && (event.key === "strata.apikey" || event.key === null)) {
+    $("api-key").value = store.get("apikey", "");
+  }
+});
 
 let health = {model: "strata", images: false, max_context: 0};
 async function loadHealth() {

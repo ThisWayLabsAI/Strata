@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## API Monitor: reuse the existing Chat key
+
+2026-10-17: the user requested automatic reuse of the Chat API key. Monitor prefers the existing JSON local-storage slot, keeps the old session slot only as a compatibility fallback, and shares manual updates with Chat. Open pages synchronize changes/clearing; stale responses cannot overwrite a newer key's connection state. Keep manual entry usable when storage is blocked and preserve server-side authorization. Same-origin browser storage is the boundary; localhost and Tailscale remain separate. See [API_MONITOR_AUTH.md](API_MONITOR_AUTH.md).
+
 ## Tool budget: 16 local rounds and a final answer pass
 
 2026-10-16: the user reported 16 calls ending at the default eight-round limit and requested the proposed fix. Override `mcp.max_rounds` to 16 locally; retain the default of 8 for other installations. After the final allowed tool results, remove tools and request one answer pass using collected evidence and acknowledging gaps. Keep the loop bounded, preserve cancellation/client-owned tools/image handoff, and describe the limit accurately in the footer. See [TOOL_ROUND_LIMIT.md](TOOL_ROUND_LIMIT.md). This backend/config change requires coordinated restart rather than static-file deployment.
