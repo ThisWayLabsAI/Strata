@@ -2,6 +2,10 @@
 
 Recorded 2026-10-15. This is the decision record for the local fork; use [the handoff](THISWAYLABS_HANDOFF.md) for deployment state and [feature plans](THISWAYLABS_FEATURE_PLANS.md) for acceptance criteria.
 
+## Tool budget: 16 local rounds and a final answer pass
+
+2026-10-16: the user reported 16 calls ending at the default eight-round limit and requested the proposed fix. Override `mcp.max_rounds` to 16 locally; retain the default of 8 for other installations. After the final allowed tool results, remove tools and request one answer pass using collected evidence and acknowledging gaps. Keep the loop bounded, preserve cancellation/client-owned tools/image handoff, and describe the limit accurately in the footer. See [TOOL_ROUND_LIMIT.md](TOOL_ROUND_LIMIT.md). This backend/config change requires coordinated restart rather than static-file deployment.
+
 ## Mobile Options: separate settings from the response
 
 2026-10-16 image follow-up: the user selected Images immediately after Attach. Reuse the existing image opt-in and keep its details in Options. Show an accent plus checkmark when enabled and expose pressed state to assistive technology. Move Sampling and thinking into mobile Options to preserve 44px targets; retain the original desktop controls and compact reading row.

@@ -1330,7 +1330,7 @@ async function send() {
   StrataChatImages.finish(m, !!m.stopped);
   const ran = (m.tools || []).filter((t) => t.state === "done" || t.state === "error").length;
   if (ran) m.meta = `${m.meta ? `${m.meta} · ` : ""}${ran} tool call${ran > 1 ? "s" : ""}`;
-  if (m.limit) m.meta = `${m.meta || ""} · stopped at the limit of ${m.limit} tool rounds (mcp.max_rounds)`;
+  if (m.limit) m.meta = `${m.meta || ""} · tool limit reached (${m.limit} rounds); final pass without tools`;
   if (m.model && modelSelection) m.meta = `${m.model}${m.meta ? ` · ${m.meta}` : ""}`;
   busy = null;
   setBusy(false);

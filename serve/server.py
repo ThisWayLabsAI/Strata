@@ -4621,7 +4621,8 @@ def _debug_req(api, req, messages, tools, max_new, thinking, prompt_tokens):
 def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new, max_req, sampling, cancel,
                  mcp_names, image_hub=None):
     """Service.run with the MCP tools executed here: the model writes a call to an MCP tool, the server runs it, adds
-    the call and its result to the conversation and lets the model continue - up to `max_rounds` times.  Yields what
+    the call and its result to the conversation and lets the model continue - up to `max_rounds` times, followed
+    by one answer pass without tools when the budget is exhausted. Yields what
     Service.run yields (text, thinking, the request's own tool calls) plus ("mcp", {...}) for the tool activity, and
     one ("done", ...) at the very end with the output tokens of every round.
 
@@ -4630,6 +4631,7 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
     could not reach the model before the client's)."""
     max_rounds = int(hub.settings["max_rounds"])
     total, rounds, done = 0, 0, None
+    finalizing = False
     messages = list(messages)
     while True:
         text, reasoning, calls, own_calls = [], [], [], 0
@@ -4654,10 +4656,7 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
                     reasoning.append(ev.text)
             yield kind, x
         total += done["completion_tokens"]
-        run_them = calls and not own_calls and done["finish"] == "stop" and not cancel.is_set()
-        if run_them and rounds >= max_rounds:
-            yield "mcp", {"event": "limit", "max_rounds": max_rounds}
-            run_them = False
+        run_them = calls and not own_calls and not finalizing and done["finish"] == "stop" and not cancel.is_set()
         if not run_them:
             for c in calls:                              # announced, never run: close them in the client's view
                 yield "mcp", {"event": "result", "id": c.id, "ok": False, "skipped": True, "text": "not run",
@@ -4710,6 +4709,19 @@ def run_with_mcp(svc: Service, hub, messages, tools, kw, ids, thinking, max_new,
                          **({"reasoning_content": "".join(reasoning).strip()} if reasoning else {}),
                          "tool_calls": [{"function": {"name": c.name, "arguments": c.arguments}} for c in calls]})
         messages += [{"role": "tool", "content": r} for r in results]
+        if rounds >= max_rounds:
+            # Keep the last allowed results, then give the model one answer pass with no tools.
+            # This also bounds models that keep requesting tools despite the final instruction.
+            finalizing = True
+            tools = []
+            messages.append({"role": "user", "content": (
+                "The tool round limit has been reached. Do not call any more tools. "
+                "Finish answering my original request using the information already gathered. "
+                "Explain any remaining gaps or failed lookups; do not invent missing facts.")})
+            yield "mcp", {"event": "limit", "max_rounds": max_rounds}
+            if cancel.is_set():
+                done = {**done, "finish": "cancel"}
+                break
         try:
             ids, thinking, max_new = svc.prepare(messages, tools, kw, max_req, cancel=cancel)
         except ClientGone:                                      # #1999: the client left while a picture was prepared

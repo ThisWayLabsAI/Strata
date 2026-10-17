@@ -15,12 +15,14 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from serve import mcp_fake_server as fake  # noqa: E402
-from serve.frontend import ChatTemplate  # noqa: E402
+from serve.frontend import ChatTemplate, Event, ToolCall  # noqa: E402
 from serve.mcp import McpCancelled, McpHub, hub_from_config  # noqa: E402
-from serve.server import ByteTokenizer, MockEngine, Service, serve  # noqa: E402
+from serve.server import ByteTokenizer, MockEngine, Service, run_with_mcp, serve  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FAKE = str(ROOT / "serve" / "mcp_fake_server.py")
@@ -365,11 +367,60 @@ class ToolLoop(unittest.TestCase):
         self.start(call_script("fake__echo", text="again"))          # the model never stops calling
         code, text = self.post({"strata_mcp": True})
         mcp = [c["strata_mcp"] for c in self.chunks(text) if "strata_mcp" in c]
-        self.assertEqual(len(self.engine.prompts), 3)                # 2 rounds of tools, then the limit
+        self.assertEqual(len(self.engine.prompts), 3)                # 2 rounds, then exactly one tool-free pass
         self.assertEqual(sum(m["event"] == "call" for m in mcp), 2)
         self.assertIn({"event": "limit", "max_rounds": 2}, mcp)
         self.assertTrue(mcp[-1].get("skipped"))
+        self.assertNotIn("# Tools", self.engine.prompt_text(2))
         self.assertEqual(self.chunks(text)[-1]["choices"][0]["finish_reason"], "stop")
+
+    def test_limit_finishes_with_last_results_and_no_tools(self):
+        self.start(call_script("fake__echo", text="first result"),
+                   call_script("fake__echo", text="last result"), "</think>\n\nHere is the final answer.")
+        code, text = self.post({"strata_mcp": True})
+        self.assertEqual(code, 200, text)
+        cs = self.chunks(text)
+        mcp = [c["strata_mcp"] for c in cs if "strata_mcp" in c]
+        self.assertEqual(sum(m["event"] == "call" for m in mcp), 2)
+        self.assertEqual(sum(m["event"] == "limit" for m in mcp), 1)
+        final = self.engine.prompt_text(2)
+        self.assertIn("last result", final)
+        self.assertIn("Finish answering my original request", final)
+        self.assertNotIn("# Tools", final)
+        self.assertIn("Here is the final answer.", "".join(
+            c["choices"][0]["delta"].get("content", "") for c in cs))
+        self.assertEqual(cs[-1]["choices"][0]["finish_reason"], "stop")
+        self.assertGreater(cs[-1]["usage"]["completion_tokens"], len("Here is the final answer."))
+
+    def test_one_round_limit_and_nonstream_final_answer(self):
+        self.hub.settings["max_rounds"] = 1
+        self.start(call_script("fake__echo", text="only result"), "</think>\n\nOne round was enough.")
+        code, text = self.post({"strata_mcp": True}, stream=False)
+        self.assertEqual(code, 200, text)
+        response = json.loads(text)
+        self.assertIn("One round was enough.", response["choices"][0]["message"]["content"])
+        self.assertEqual(len(self.engine.prompts), 2)
+        self.assertNotIn("# Tools", self.engine.prompt_text(1))
+
+    def test_failed_last_lookup_is_available_to_final_answer(self):
+        self.hub.settings["max_rounds"] = 1
+        self.start(call_script("fake__fail"), "</think>\n\nI could not verify that lookup.")
+        code, text = self.post({"strata_mcp": True})
+        self.assertEqual(code, 200, text)
+        self.assertIn("error: it failed on purpose", self.engine.prompt_text(1))
+        self.assertIn("do not invent missing facts", self.engine.prompt_text(1))
+        self.assertEqual(len(self.engine.prompts), 2)
+
+    def test_sixteen_round_override_is_bounded(self):
+        self.hub.settings["max_rounds"] = 16
+        self.start(*([call_script("fake__echo", text="x")] * 16), "</think>\n\nFinished research.")
+        code, text = self.post({"strata_mcp": True})
+        self.assertEqual(code, 200, text)
+        mcp = [c["strata_mcp"] for c in self.chunks(text) if "strata_mcp" in c]
+        self.assertEqual(sum(m["event"] == "call" for m in mcp), 16)
+        self.assertIn({"event": "limit", "max_rounds": 16}, mcp)
+        self.assertEqual(len(self.engine.prompts), 17)
+        self.assertNotIn("# Tools", self.engine.prompt_text(16))
 
     def test_stop_during_a_tool(self):
         """Closing the connection while a slow tool runs stops the tool (notifications/cancelled) and the loop."""
@@ -422,6 +473,27 @@ class ToolLoop(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             urllib.request.urlopen(self.base + "/mcp", timeout=10)
         self.svc.api_key = ""
+
+
+class BudgetCancellation(unittest.TestCase):
+    def test_cancel_at_limit_does_not_start_final_pass(self):
+        svc = Mock()
+        svc.run.return_value = iter([
+            ("event", Event("tool_call", call=ToolCall("echo", {}))),
+            ("done", {"finish": "stop", "completion_tokens": 1}),
+        ])
+        hub = SimpleNamespace(settings={"max_rounds": 1}, routes=lambda: {},
+                              call=lambda *args: {"ok": True, "text": "result", "chars": 6,
+                                                  "truncated": False, "ms": 0})
+        cancel = threading.Event()
+        events = []
+        for kind, value in run_with_mcp(svc, hub, [], [], {}, [1], False, 10, 10, {}, cancel, {"echo"}):
+            events.append((kind, value))
+            if kind == "mcp" and value["event"] == "limit":
+                cancel.set()
+        svc.prepare.assert_not_called()
+        self.assertEqual(svc.run.call_count, 1)
+        self.assertEqual(events[-1][1]["finish"], "cancel")
 
 
 class NoServers(unittest.TestCase):

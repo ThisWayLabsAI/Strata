@@ -239,6 +239,15 @@ class ChatImages(unittest.TestCase):
         self.assertEqual(self.svc.mcp.calls,1)
         self.assertEqual(self.svc.images.totals["jobs"],1)
 
+    def test_image_only_budget_finishes_without_another_image(self):
+        self.start(image_call(), image_call(), "</think>\n\nThe image is ready.")
+        code, body = self.post(strata_images=True)
+        self.assertEqual(code, 200, body)
+        self.assertEqual(self.svc.images.totals["jobs"], 1)  # existing one-image-per-answer guard
+        self.assertEqual(len(self.engine.prompts), 3)
+        self.assertNotIn("# Tools", self.engine.prompt_text(2))
+        self.assertIn("The image is ready.", body["choices"][0]["message"]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()
