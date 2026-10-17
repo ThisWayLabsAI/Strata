@@ -1,5 +1,7 @@
 # Upstream assessment, 2026-10-17
 
+Follow-up: the blocker below was fixed, validated and deployed through [PR #2](https://github.com/ThisWayLabsAI/Strata/pull/2). See [the integration record](UPSTREAM_INTEGRATION_2026-10-17.md) for the completed update; this document preserves the original assessment.
+
 Candidate: upstream `477ac13cbe8e582c20484871ce459d20d82df09d` (0.1.45), reviewed against common base `296b59d2` and fork stable `8fd8ed7c`. Fetch confirmed 264 upstream commits and 45 fork commits since the base; the upstream delta changes 267 files, with 30,785 insertions and 1,289 deletions. Counts include merges/tests/docs and are not counts of user-facing features.
 
 The existing stable history is published: development and `origin/thiswaylabs` matched `8fd8ed7c`, and every existing local branch tip was reachable from remote stable. No feature work was stranded on an unpublished branch. This assessment and workflow follow-up are published separately as documentation updates.

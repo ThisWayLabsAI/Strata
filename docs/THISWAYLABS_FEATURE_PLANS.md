@@ -2,9 +2,9 @@
 
 Publication update, 2026-10-16: the tested local stable history is published to the fork's `thiswaylabs` branch. Authentication is working; see [the handoff](THISWAYLABS_HANDOFF.md) for the publication and deployment record. Earlier pending-authentication notes below are historical.
 
-## Upstream 0.1.45: assessed, integration pending
+## Upstream 0.1.45: integrated and deployed
 
-The [fork workflow](FORK_WORKFLOW.md) is the maintenance policy. The [2026-10-17 assessment](UPSTREAM_REVIEW_2026-10-17.md) pins upstream `477ac13c`, 264 commits beyond our base. Its automatic merge passes 110 combined CPU mocks but retains the old tokenizer's prompt encoder after a model switch. Integration acceptance: fix cache replacement and rollback with different-tokenizer regression, review sampling migration/model-family defaults, pass fork and upstream/browser checks, then build native code and validate Original/SC117 chat/vision/tools/images/cancellation/GPU handoff. No upstream code is deployed by the documentation/assessment task.
+The [fork workflow](FORK_WORKFLOW.md) is the maintenance policy. [Integration](UPSTREAM_INTEGRATION_2026-10-17.md) of upstream `477ac13c` completed through PR #2, deployed as application `f7d88710` with CUDA engine 0.1.45. The cache-binding blocker identified in the assessment is fixed with distinct-tokenizer and rollback regressions; saved sampling choices are preserved. Upstream/fork CPU, browser, native CUDA build and Original/SC117 chat/vision/tools/images/cancellation/GPU handoff checks passed. The clean main mirror matches upstream. The earlier assessment remains the historical pre-integration report.
 
 ## Mobile reading space and control spacing
 
