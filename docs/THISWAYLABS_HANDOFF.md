@@ -1,6 +1,12 @@
 # Thiswaylabs Strata handoff
 
-Updated 2026-10-16. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+Updated 2026-10-17. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+
+## Upstream strategy documented and candidate assessed, 2026-10-17
+
+[FORK_WORKFLOW.md](FORK_WORKFLOW.md) is now the repository's maintenance policy; the external controls workflow points to it. Authentication is working. Before this documentation update, dev/live/remote stable matched `8fd8ed7c`; every local feature-branch tip was reachable from remote stable. The documentation follow-up is also published and synchronized to live without restart. Runtime application remains `2c1ae3ca`, with local `mcp.max_rounds=16`; no upstream runtime/native/config/package changes were deployed.
+
+Upstream `477ac13c` (0.1.45) contains 264 commits since base `296b59d2`; our published fork had 45. [The assessment](UPSTREAM_REVIEW_2026-10-17.md) explains user-relevant benefits, upstream-only benchmark evidence and rollout gates. A merge-tree preview had no textual conflicts. An isolated exported merge passed all 110 existing combined CPU mocks using installed runtime dependencies. A targeted probe nevertheless confirmed an integration blocker: registry model switches replace `svc.tok` but retain upstream's newly added prompt encoder bound to the original tokenizer. Fix and test that binding/rollback before integration; also review sampling migration and model-family defaults. Native builds/GPU/browser integration gates remain outstanding. The first system-Python test attempt lacked `regex`; no packages were installed, and the existing runtime environment passed. Evidence/snapshot: `Strata-data\logs\upstream-review-20261017` and `C:\AI\Strata-upstream-review-20261017`. Neither `main` nor stable/live received upstream code. Camera changes remain experimental.
 
 ## GitHub publication completed, 2026-10-16
 
