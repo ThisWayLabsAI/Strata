@@ -2,6 +2,12 @@
 
 Updated 2026-10-17. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Current release: API Monitor shares the Chat key
+
+Application `0705b83e` is deployed through [PR #4](https://github.com/ThisWayLabsAI/Strata/pull/4). Monitor automatically uses the saved Chat key on the same browser origin; manual Monitor changes share back to Chat and open pages follow changes/clearing. Legacy session fallback, blocked-storage manual entry and stale-response protection are covered. Refresh both Chat and API Monitor. [API_MONITOR_AUTH.md](API_MONITOR_AUTH.md) records behavior, limits and validation: 12 focused auth/storage/race tests, 10 existing Monitor HTTP tests and real-tab fake-key fixture scenarios passed. Mobile form fits 390px/320px with 44px controls; screenshot inspected and browser errors empty.
+
+The compatible static deployment kept the same live listener PID. Served app.js/monitor.js/monitor.html hashes, four unchanged config hashes, health and unauthenticated API 401 protection passed. Native engine remains 0.1.45; no server restart, key/config/model/engine/package/control/task change or native inference occurred. Tests did not access live history. The fixture and browser are closed. Rollback `rollback/pre-monitor-shared-key-20261017` retains `d6342b23`; deployment report: `Strata-data\backups\monitor-shared-key-deploy-20261017`; test evidence: `Strata-data\logs\monitor-shared-key-20261017`. Camera changes remain experimental.
+
 ## Current release: upstream 0.1.45 synchronized and deployed
 
 Application `f7d88710` is deployed in `C:\AI\Strata`. [PR #2](https://github.com/ThisWayLabsAI/Strata/pull/2) merged all 264 upstream commits through `477ac13c` into `thiswaylabs`, preserving the fork history and fixing tokenizer-cache/model-family replacement and rollback. Explicit saved sampling is preserved; new/reset settings use upstream model-card defaults. Clean main is published at the same upstream revision. The native-tested portable CUDA 13.3 sm_86 engine/DLL (0.1.45) is installed; the existing GPU vision encoder is unchanged. [The integration record](UPSTREAM_INTEGRATION_2026-10-17.md) contains CPU/browser/build/native evidence and rollback steps.
