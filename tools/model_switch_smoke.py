@@ -4,6 +4,7 @@ Uses one owned development server and a temporary private registry config. Keeps
 reports/outputs outside Git and deletes that credential-bearing config on exit.
 Does not deploy source, change existing configs, or restart live automatically.
 """
+import argparse
 import base64
 import hashlib
 import json
@@ -20,6 +21,9 @@ from model_registry_config import build
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--engine", type=Path, help="test this separately built engine; source configs remain unchanged")
+    args = parser.parse_args()
     if listening(8080) or listening(8081):
         raise RuntimeError("Stop live and other GPU servers before running this gate")
     folder = DATA / "logs" / ("model-switch-native-" + time.strftime("%Y%m%d-%H%M%S"))
@@ -28,6 +32,11 @@ def main():
              Path(r"C:\AI\Strata\strata-iq2_xs.json"), Path(r"C:\AI\Strata\strata-sc117-iq2_xs.json")]
     before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
     cfg = build(paths[:2])
+    if args.engine:
+        engine = args.engine.resolve(strict=True)
+        cfg["exe"] = str(engine)
+        for profile in cfg["model_registry"].values():
+            profile["exe"] = str(engine)
     ids = list(cfg["model_registry"])
     private = folder / "private-registry.json"
     private.write_text(json.dumps(cfg), encoding="utf-8")
@@ -39,6 +48,7 @@ def main():
         env[key] = str(target)
     env["UV_PYTHON"] = sys.executable
     report = {"implementation": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+              "engine_exe": cfg["exe"], "engine_sha256": hashlib.sha256(Path(cfg["exe"]).read_bytes()).hexdigest(),
               "configured_image_policy": cfg["images"].get("gpu_policy", "auto"), "models": {}, "transitions": [],
               "original_config_hashes": before}
     client = Client(cfg)

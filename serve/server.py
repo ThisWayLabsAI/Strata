@@ -6945,6 +6945,7 @@ def installed_model_service(model, profile):
         vision = Vision(vcfg, env=vision_env(profile, env), lazy=True)
     result = Service(engine, tok, ChatTemplate(tpath / "chat_template.jinja"), model_name=model,
                      vision=vision, sampling_defaults=sampling_defaults_from_config(profile))
+    result.model_arch = profile.get("arch") or "qwen4exp"
     result.effort_end = bool(effort)
     return result
 

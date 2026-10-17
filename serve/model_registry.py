@@ -88,7 +88,7 @@ class Registry:
                 candidate.vision.shutdown()
             raise RegistryError("GPU ownership is busy; retry after the current job", "model_busy", 409)
         fields = ("engine", "tok", "template", "model", "vision", "literals", "stop_ids",
-                  "sampling_defaults", "effort_end")
+                  "sampling_defaults", "effort_end", "prompts", "model_arch")
         previous = {field: getattr(svc, field) for field in fields}
         try:
             with svc.status_lock:

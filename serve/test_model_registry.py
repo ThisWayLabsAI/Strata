@@ -63,6 +63,28 @@ class Switching(unittest.TestCase):
         self.assertEqual(self.chat("original")[1]["model"], "original")
         self.assertFalse(second.alive())
 
+    def test_switch_replaces_tokenizer_bound_prompt_cache_and_family(self):
+        class ShiftedTokenizer(ByteTokenizer):
+            def encode_marked(self, *args, **kwargs):
+                ids, marks = super().encode_marked(*args, **kwargs)
+                return [token + 4096 for token in ids], marks
+
+        candidate = service("sc117")
+        candidate.tok = ShiftedTokenizer()
+        candidate.prompts = type(candidate.prompts)(candidate.tok)
+        candidate.model_arch = "replacement-family"
+        self.factory.side_effect = None
+        self.factory.return_value = candidate
+        messages = [{"role": "user", "content": "distinct tokenizer"}]
+        before = self.svc.encode_prompt(messages, None, {})
+        expected = candidate.encode_prompt(messages, None, {})
+        self.assertNotEqual(before, expected)
+        self.assertEqual(self.request("/v1/model-selection", {"model": "sc117"})[0], 200)
+        self.assertIs(self.svc.prompts, candidate.prompts)
+        self.assertIs(self.svc.prompts.tok, self.svc.tok)
+        self.assertEqual(self.svc.encode_prompt(messages, None, {}), expected)
+        self.assertEqual(self.svc.model_arch, "replacement-family")
+
     def test_alias_stays_bound_to_startup_model(self):
         self.chat()
         code, body = self.chat("legacy")
@@ -126,10 +148,15 @@ class Switching(unittest.TestCase):
         self.factory.return_value = candidate
         self.svc.restore_after_load = "not-a-real-snapshot"
         old = self.svc.engine
+        old_prompts = self.svc.prompts
+        self.svc.model_arch = "original-family"
         code, body = self.chat()
         self.assertEqual(code, 503, body)
         self.assertEqual(body["error"]["code"], "load_failed_previous_restored")
         self.assertIs(self.svc.engine, old)
+        self.assertIs(self.svc.prompts, old_prompts)
+        self.assertIs(self.svc.prompts.tok, self.svc.tok)
+        self.assertEqual(self.svc.model_arch, "original-family")
         self.assertTrue(self.svc.loaded())
         self.assertIsNone(self.svc.restore_after_load)
         self.assertEqual(self.chat("original")[0], 200)

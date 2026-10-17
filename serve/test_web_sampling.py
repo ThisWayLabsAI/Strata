@@ -29,7 +29,7 @@ class WebSampling(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         src = APP.read_text(encoding="utf-8")
-        cls.defaults = slice_between(src, "const DEFAULTS", "let settings")
+        cls.defaults = slice_between(src, "const DEFAULTS", "const savedSampling")
         cls.shared = slice_between(src, "function sharedDefaults", "async function saveShared")
         cls.body = slice_between(src, "  if (!(settings.temperature > 0)) {", "  if (settings.seed)")
 
@@ -66,6 +66,25 @@ class WebSampling(unittest.TestCase):
         body, shared = self.sampling(temperature=0)
         self.assertEqual(body, {"temperature": 0})
         self.assertEqual(shared["temperature"], 0)
+
+    def test_explicit_choices_equal_to_defaults_are_sent(self):
+        for temperature in (0.6, 1.0):
+            body, shared = self.sampling(temperature=temperature, samplingMode="custom")
+            self.assertEqual(body["temperature"], temperature)
+            self.assertEqual(shared["temperature"], temperature)
+
+    def test_saved_legacy_sampling_is_preserved(self):
+        src = APP.read_text(encoding="utf-8")
+        hydrate = slice_between(src, "const savedSampling", "let messages")
+        for saved in (None, {"temperature": 0.6}, {"temperature": 0.3},
+                      {"temperature": 1.0, "samplingMode": "model"}):
+            js = self.defaults + f"const store = {{get: () => ({json.dumps(saved)})}};\n" + hydrate
+            js += "console.log(JSON.stringify(settings));"
+            out = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=30)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            result = json.loads(out.stdout)
+            self.assertEqual(result["samplingMode"], "custom" if saved and "samplingMode" not in saved else "model")
+            self.assertEqual(result["temperature"], saved["temperature"] if saved else 1.0)
 
     def test_the_old_default_is_shown_as_the_new_one(self):
         src = APP.read_text(encoding="utf-8")
