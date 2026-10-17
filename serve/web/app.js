@@ -563,8 +563,21 @@ function markdown(text) {
 }
 
 // ------------------------------------------------------------------ Chat
-const DEFAULTS = {thinking: "high", temperature: 0.6, top_p: 0.95, top_k: 20, max: "", seed: "", show: true, esp: true, mcp: true};
-let settings = {...DEFAULTS, ...store.get("sampling", {})};
+// The sampling shown until the user changes it is the model card's thinking set. Untouched, the page sends NO sampling
+// fields: the server picks the card's set for the request's thinking state (thinking 1.0 / 0.95 / 20, not thinking
+// 0.7 / 0.8 / 20 with a presence penalty). Existing saved settings stay explicit; Reset opts into model defaults.
+const DEFAULTS = {thinking: "high", temperature: 1.0, top_p: 0.95, top_k: 20, max: "", seed: "", show: true, esp: true, mcp: true, samplingMode: "model"};
+const OLD_DEFAULT_TEMPERATURE = 0.6;
+function samplingUntouched(s) {
+  if (s.samplingMode === "custom") return false;
+  const t = +s.temperature;
+  return (t === DEFAULTS.temperature || t === OLD_DEFAULT_TEMPERATURE) && +s.top_p === DEFAULTS.top_p && +s.top_k === DEFAULTS.top_k;
+}
+const savedSampling = store.get("sampling", null);
+let settings = {...DEFAULTS, ...savedSampling};
+// Existing saved values may be deliberate, including 0.6. Preserve them as explicit choices.
+if (savedSampling && !savedSampling.samplingMode) settings.samplingMode = "custom";
+if (samplingUntouched(settings)) settings.temperature = DEFAULTS.temperature;
 let messages = store.get("chat", []);
 let conversationModel = store.get("chatModel", null);
 let modelSelection = null;
@@ -1249,10 +1262,10 @@ async function send() {
 
   const body = {model: modelSelection ? (conversationModel || modelSelection.default_model) : health.model, messages: apiMessages(), stream: true,
                 reasoning_effort: settings.thinking};
-  if (settings.temperature > 0) {
-    Object.assign(body, {temperature: +settings.temperature, top_p: +settings.top_p, top_k: +settings.top_k});
-  } else {
+  if (!(settings.temperature > 0)) {
     body.temperature = 0;
+  } else if (!samplingUntouched(settings)) {
+    Object.assign(body, {temperature: +settings.temperature, top_p: +settings.top_p, top_k: +settings.top_k});
   }
   if (settings.seed) body.seed = +settings.seed;
   if (settings.max) body.max_tokens = +settings.max;
@@ -1486,7 +1499,9 @@ function openDrawer(open) {
   $("scrim").hidden = !open;
   if (open) { loadDrawer(); loadShared(); loadMcp(); }
 }
+let drawerSamplingMode = "model";
 function loadDrawer(s = settings) {
+  drawerSamplingMode = s.samplingMode || "custom";
   for (const b of $("s-thinking").children) b.setAttribute("aria-checked", String(b.dataset.v === s.thinking));
   $("s-temp").value = s.temperature; $("s-topp").value = s.top_p; $("s-topk").value = s.top_k;
   $("s-max").value = s.max; $("s-seed").value = s.seed;
@@ -1507,8 +1522,9 @@ async function loadShared() {
   $("s-share").setAttribute("aria-checked", String(sharedOn));
 }
 function sharedDefaults(s) {
-  const d = {reasoning_effort: s.thinking, temperature: +s.temperature};
-  if (+s.temperature > 0) Object.assign(d, {top_p: +s.top_p, top_k: +s.top_k});
+  const d = {reasoning_effort: s.thinking};
+  if (!(+s.temperature > 0)) d.temperature = 0;
+  else if (!samplingUntouched(s)) Object.assign(d, {temperature: +s.temperature, top_p: +s.top_p, top_k: +s.top_k});
   if (s.seed) d.seed = +s.seed;
   if (s.max) d.max_tokens = +s.max;
   if (projectionLoaded()) d.experimental_speed_projection = s.esp !== false;
@@ -1539,7 +1555,7 @@ function outputs() {
   for (const id of ["s-topp", "s-topk"]) $(id).disabled = t === 0;
 }
 for (const b of $("s-thinking").children) b.onclick = () => { for (const x of $("s-thinking").children) x.setAttribute("aria-checked", String(x === b)); outputs(); };
-for (const id of ["s-temp", "s-topp", "s-topk"]) $(id).oninput = outputs;
+for (const id of ["s-temp", "s-topp", "s-topk"]) $(id).oninput = () => { drawerSamplingMode = "custom"; outputs(); };
 $("s-show").onclick = () => $("s-show").setAttribute("aria-checked", String($("s-show").getAttribute("aria-checked") !== "true"));
 $("s-esp").onclick = () => $("s-esp").setAttribute("aria-checked", String($("s-esp").getAttribute("aria-checked") !== "true"));
 $("s-mcp").onclick = () => $("s-mcp").setAttribute("aria-checked", String($("s-mcp").getAttribute("aria-checked") !== "true"));
@@ -1548,6 +1564,7 @@ $("s-reset").onclick = () => loadDrawer(DEFAULTS);
 $("s-apply").onclick = async () => {
   const sel = [...$("s-thinking").children].find((b) => b.getAttribute("aria-checked") === "true");
   settings = {thinking: sel ? sel.dataset.v : "high", temperature: +$("s-temp").value, top_p: +$("s-topp").value,
+              samplingMode: drawerSamplingMode,
               top_k: +$("s-topk").value, max: $("s-max").value.trim(), seed: $("s-seed").value.trim(),
               show: $("s-show").getAttribute("aria-checked") === "true",
               esp: $("s-esp").getAttribute("aria-checked") === "true",
