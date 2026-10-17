@@ -1,5 +1,13 @@
 # Mobile composer and control spacing
 
+## Image toggle follow-up, 2026-10-16
+
+The expanded mobile toolbar places an Images toggle immediately after Attach: Attach, Images, New chat, Options. Off uses the neutral image icon; on adds the accent surface/border and a checkmark. The accessible name is Create images in chat, with `aria-pressed` and an on/off tooltip. It reuses the existing checkbox preference and request opt-in; Options changes and reference selection synchronize the icon. Collapse preserves the setting. Unsupported servers hide it, and generation/file reading/thread transitions disable it.
+
+Generate/Edit, references and image settings remain in Options. Sampling and thinking moves into Options on mobile to retain six separate 44px targets including collapse and Send/Stop. Desktop keeps its original checkbox and sampling gear. The existing checkbox also remains available in Options, synchronized with the toolbar.
+
+CPU Chromium validation passed at 320x568, 390x844, 844x390, 1280x844, 390x300 and 320x256: 126 image-toggle assertions, 126 composer assertions, 158 Options assertions and 21 private-chat assertions (431 total). Coverage includes on/off request flags, reference and checkbox synchronization, capability hiding, busy disabling, collapse, sampling access and desktop fallback. Direct pointer activation passed; dark/light screenshots were inspected and browser errors were empty. Reproduce with `tools/mobile_image_toggle_checks.js` and the existing composer/Options/private suites on CPU fixture 8091. Evidence: `Strata-data\logs\mobile-image-toggle-20261016`. No native inference, model/config changes or new storage behavior are required.
+
 ## Mobile toolbar follow-up, 2026-10-16
 
 The expanded mobile toolbar now places the existing New chat icon between Attach and Chat options. Options uses a sliders icon with an accessible label/title and retains its active accent. New is removed from the Options panel; Export remains there. All existing New chat guards and private-mode behavior are retained: New confirms discarding private contents and stays private. The compact reading row and desktop controls retain their existing behavior.

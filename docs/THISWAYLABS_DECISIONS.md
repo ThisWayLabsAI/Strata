@@ -4,6 +4,8 @@ Recorded 2026-10-15. This is the decision record for the local fork; use [the ha
 
 ## Mobile Options: separate settings from the response
 
+2026-10-16 image follow-up: the user selected Images immediately after Attach. Reuse the existing image opt-in and keep its details in Options. Show an accent plus checkmark when enabled and expose pressed state to assistive technology. Move Sampling and thinking into mobile Options to preserve 44px targets; retain the original desktop controls and compact reading row.
+
 2026-10-16 follow-up: the user approved moving New chat into the expanded mobile toolbar next to Attach, and replacing the Options text with a sliders icon. Reuse the existing guarded New action, retain Export in Options and the separate sampling gear, and preserve 44px targets and accessible labels. The reading row remains compact.
 
 At the user's request, give Options a raised theme-aware surface, a clear heading/close control and an active toggle style. Dim only the response behind it, with outside-tap dismissal; preserve the draft and leave the composer/Send/Stop accessible above the layer. Keep one source of panel state and retain the existing desktop inline layout. Validate both themes, pointer hit-testing and keyboard dismissal in the CPU fixtures, then use the compatible static-file deployment path. The user has confirmed the preceding keyboard-spacing fix on their phone.

@@ -378,18 +378,21 @@ html[data-chat-compact="true"] #chat-model-row:not([data-open="true"]) { display
 .chat-image-help summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .chat-image-help p { padding-top: 8px; }
 #send-btn, #stop-btn { flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; }
-#composer-expand, #composer-collapse, #composer-options-toggle, .mobile-composer-actions { display: none; }
+#composer-expand, #composer-collapse, #composer-options-toggle, #chat-image-toggle, .mobile-composer-actions { display: none; }
 #chat-options { display: flex; flex-direction: column; gap: 8px; }
 @media (max-width: 600px) {
   #private-discard-dialog form { flex-direction: column; }
   #private-discard-dialog button { width: 100%; }
 }
 html[data-mobile-chat="true"] #composer-options-toggle,
-html[data-mobile-chat="true"] #composer-collapse { display: inline-flex; min-height: 44px; }
+html[data-mobile-chat="true"] #composer-collapse,
+html[data-mobile-chat="true"] #chat-image-toggle:not([hidden]) { display: inline-flex; min-height: 44px; }
 html[data-mobile-chat="true"] #composer-options-toggle,
+html[data-mobile-chat="true"] #chat-image-toggle,
 html[data-mobile-chat="true"] #composer #new-btn { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
 html[data-mobile-chat="true"] #composer .st-composer__bar { gap: 4px; flex-wrap: nowrap; }
 html[data-mobile-chat="true"] #composer #export-btn,
+html[data-mobile-chat="true"] #composer #sampling-btn,
 html[data-mobile-chat="true"] #composer #chat-model-settings { display: none; }
 html[data-mobile-chat="true"] #chat-options { display: none; }
 html[data-mobile-chat="true"] #chat-options[data-open="true"] {
@@ -425,3 +428,7 @@ html[data-mobile-chat="true"] #chat-options-heading { display: flex; align-items
 #chat-options-title { font-size: var(--st-fs-base); margin: 0; }
 html[data-mobile-chat="true"] #chat-options-close { min-width: 44px; min-height: 44px; }
 html[data-mobile-chat="true"] #composer-options-toggle[aria-expanded="true"] { background: var(--st-accent-tint); border-color: var(--st-accent-text); color: var(--st-accent-text); }
+#chat-image-toggle { position: relative; }
+.chat-image-toggle-check { display: none; position: absolute; width: 12px; height: 12px; right: 2px; top: 2px; border-radius: 50%; background: var(--st-surface); }
+#chat-image-toggle[aria-pressed="true"] { background: var(--st-accent-tint); border-color: var(--st-accent-text); color: var(--st-accent-text); }
+#chat-image-toggle[aria-pressed="true"] .chat-image-toggle-check { display: block; }

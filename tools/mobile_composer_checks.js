@@ -18,7 +18,7 @@
   const options=$("chat-options").getBoundingClientRect();
   check(options.top>=0&&options.bottom<=innerHeight&&visible($("chat-image-enabled")),"Options panel is visible and bounded by the viewport");
   check(visible($("new-btn"))&&!$("chat-options").contains($("new-btn"))&&visible($("chat-options-export")),"New chat stays in the toolbar; Export remains in Options");
-  const toolbarIds=["attach-btn","new-btn","composer-options-toggle","sampling-btn","composer-collapse","send-btn"];
+  const toolbarIds=["attach-btn","chat-image-toggle","new-btn","composer-options-toggle","composer-collapse","send-btn"];
   const bounds=toolbarIds.map(id=>$(id).getBoundingClientRect());
   check(bounds.every((r,i)=>r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth&&(!i||r.left>=bounds[i-1].right)),"Toolbar icons have separate 44px targets in the intended order");
   check($("composer-options-toggle").getAttribute("aria-label")==="Chat options"&&!$("composer-options-toggle").textContent.trim()&&!!$("composer-options-toggle").querySelector("svg"),"Options uses an accessible icon without a text label");

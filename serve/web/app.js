@@ -647,6 +647,7 @@ function closeChatOptions() {
 $("chat-options-close")?.addEventListener("click", closeChatOptions);
 $("chat-options-backdrop")?.addEventListener("click", closeChatOptions);
 $("chat-options-export").onclick = () => $("export-btn").click();
+$("chat-options-sampling")?.addEventListener("click", () => { closeChatOptions(); openDrawer(true); });
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("chat-options").dataset.open === "true") {
     closeChatOptions();
@@ -838,6 +839,11 @@ $("threads-editor").onsubmit = async event => {
 };
 $("chat-image-enabled").checked = store.get("chatImageTools", false) === true;
 $("chat-image-enabled").onchange = () => { store.set("chatImageTools", $("chat-image-enabled").checked); renderChatReferences(); renderAttachments(); };
+$("chat-image-toggle")?.addEventListener("click", () => {
+  if (!health.chat_image_generation || busy || attachmentReads || threadTransition || !threadsReady) return;
+  $("chat-image-enabled").checked = !$("chat-image-enabled").checked;
+  $("chat-image-enabled").dispatchEvent(new Event("change"));
+});
 const chatReferences = []; // Transient selected bytes; never written to transcript/localStorage.
 function selectChatReference(data, name) {
   if (busy || attachmentReads || threadTransition) throw new Error("Wait for the current request or file reading to finish.");
@@ -850,6 +856,14 @@ function selectChatReference(data, name) {
   renderChatReferences(); renderAttachments();
 }
 function renderChatReferences() {
+  const toggle = $("chat-image-toggle");
+  if (toggle) {
+    const on = !!health.chat_image_generation && $("chat-image-enabled").checked;
+    toggle.hidden = !health.chat_image_generation;
+    toggle.disabled = !!busy || attachmentReads > 0 || threadTransition || !threadsReady;
+    toggle.setAttribute("aria-pressed", String(on));
+    toggle.title = `Create images in chat: ${on ? "on" : "off"}`;
+  }
   const enabled = $("chat-image-enabled").checked && health.chat_image_editing;
   $("chat-image-settings").hidden = !enabled;
   $("chat-image-settings").textContent = `${$("chat-image-operation").value === "edit" ? "Edit" : "Generate"} · ${chatReferences.length} refs`;
