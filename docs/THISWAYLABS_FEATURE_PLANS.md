@@ -2,6 +2,10 @@
 
 Publication update, 2026-10-16: the tested local stable history is published to the fork's `thiswaylabs` branch. Authentication is working; see [the handoff](THISWAYLABS_HANDOFF.md) for the publication and deployment record. Earlier pending-authentication notes below are historical.
 
+## Upstream 0.1.45: assessed, integration pending
+
+The [fork workflow](FORK_WORKFLOW.md) is the maintenance policy. The [2026-10-17 assessment](UPSTREAM_REVIEW_2026-10-17.md) pins upstream `477ac13c`, 264 commits beyond our base. Its automatic merge passes 110 combined CPU mocks but retains the old tokenizer's prompt encoder after a model switch. Integration acceptance: fix cache replacement and rollback with different-tokenizer regression, review sampling migration/model-family defaults, pass fork and upstream/browser checks, then build native code and validate Original/SC117 chat/vision/tools/images/cancellation/GPU handoff. No upstream code is deployed by the documentation/assessment task.
+
 ## Mobile reading space and control spacing
 
 Application `8cfc842f` is deployed locally, implemented on `fix/mobile-composer` from `8e8eaa62` after the user approved advice on four mobile screenshots. Acceptance: one-row reading state, explicit expansion/collapse preserving drafts, collapse after Send, no auto-collapse during typing, Stop replacing Send, model/image controls behind Options, separated dialog/Choose image buttons and retained 44px targets. Six-size CPU/browser checks, saved-thread/image/private regressions and live deployment verification passed; see [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md). Actual Android testing remains with the user.

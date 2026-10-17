@@ -15,6 +15,9 @@ and coding agents. Nothing leaves your PC.
 
 ## How fast is it?
 
+ThisWayLabs fork maintenance: [workflow](docs/FORK_WORKFLOW.md), [current deployment](docs/THISWAYLABS_HANDOFF.md),
+and [upstream 0.1.45 assessment](docs/UPSTREAM_REVIEW_2026-10-17.md).
+
 We measured it on two ordinary gaming PCs. A token is about ¾ of a word.
 
 - **Writes answers:** how fast the reply appears in a short chat. 60 tokens per second is faster than you can read.
