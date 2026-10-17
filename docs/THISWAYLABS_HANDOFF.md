@@ -1,6 +1,12 @@
 # Thiswaylabs Strata handoff
 
-Updated 2026-10-15. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+Updated 2026-10-16. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+
+## Current release: mobile New chat and Options icons deployed
+
+Application `2d3b44c9` is deployed locally in `C:\AI\Strata`. The user requested New chat beside Attach and an icon-only Options button; the expanded mobile toolbar now uses Attach, New chat, sliders for Options, and the existing sampling gear. Export remains in Options. Existing private New confirmation and private mode are retained. Six-size CPU checks passed (126 composer/toolbar and 158 Options assertions), plus 21 private-chat checks; the dark screenshot was inspected and browser errors were empty. A separate unauthenticated live browser verified the served New target and Options label/icon without inference or user history. Both browsers and the CPU fixture were closed.
+
+The compatible static-file deployment verified idle live, all three served asset hashes, all four preserved config hashes, health and the unchanged listener PID. Rollback `rollback/pre-mobile-toolbar-20261016` retains `9069953f`. Evidence: `Strata-data\logs\mobile-toolbar-20261016`; bundle/report: `Strata-data\backups\mobile-toolbar-deploy-20261016`. No keys, models, configs, native engines, controls or task settings changed. GitHub publication remains pending authentication; camera changes remain experimental. Refresh on Android to test the new toolbar.
 
 ## Current release: Options visual separation deployed
 
