@@ -2,6 +2,12 @@
 
 Updated 2026-10-16. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Current release: mobile Images toggle deployed
+
+Application `4dd20f95` is deployed locally in `C:\AI\Strata`. The user chose Attach, Images, New chat, Options. Images reuses the existing opt-in, with accent/checkmark, pressed state and on/off tooltip. Details remain in Options; Sampling and thinking moves there on mobile. Desktop retains its original controls. Six-size CPU checks passed: 126 image-toggle, 126 composer and 158 Options assertions, plus 21 private-chat checks (431 total). Dark/light screenshots were inspected; browser errors were empty. See [MOBILE_COMPOSER.md](MOBILE_COMPOSER.md).
+
+Idle live received a compatible static-file deployment without restart. All three served asset hashes, four preserved config hashes, health and unchanged listener PID passed. An isolated unauthenticated live browser clicked Images on/off and verified checkbox/pressed-state synchronization without inference or user history; browser errors were empty. Both test browsers and the CPU fixture were closed. Rollback `rollback/pre-mobile-image-toggle-20261016` retains `2e33cdfd`. Evidence: `Strata-data\logs\mobile-image-toggle-20261016`; bundle/report: `Strata-data\backups\mobile-image-toggle-deploy-20261016`. Keys, models, configs, native engines, controls and task settings are unchanged. GitHub publication remains pending authentication; camera changes remain experimental. Refresh on Android to test.
+
 ## Current release: mobile New chat and Options icons deployed
 
 Application `2d3b44c9` is deployed locally in `C:\AI\Strata`. The user requested New chat beside Attach and an icon-only Options button; the expanded mobile toolbar now uses Attach, New chat, sliders for Options, and the existing sampling gear. Export remains in Options. Existing private New confirmation and private mode are retained. Six-size CPU checks passed (126 composer/toolbar and 158 Options assertions), plus 21 private-chat checks; the dark screenshot was inspected and browser errors were empty. A separate unauthenticated live browser verified the served New target and Options label/icon without inference or user history. Both browsers and the CPU fixture were closed.
