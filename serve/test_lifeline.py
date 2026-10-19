@@ -7,6 +7,7 @@ Each case runs a small "server" process (a fresh interpreter) that starts a slee
 is gone. The mechanism under test is Windows' job object, Linux's PR_SET_PDEATHSIG, or the portable watcher
 (forced with STRATA_LIFELINE=watcher so it is proven on every POSIX box, not only on macOS).
 """
+import ast
 import json
 import os
 import signal
@@ -17,9 +18,40 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 POSIX = os.name == "posix"
+
+class PortableIdentity(unittest.TestCase):
+    def readers(self):
+        from serve import lifeline
+        # Compile only the watcher's pure identity reader, not its signal/pipe loop.
+        function = next(node for node in ast.parse(lifeline._WATCHER).body
+                        if isinstance(node, ast.FunctionDef) and node.name == "start_of")
+        namespace = {"subprocess": subprocess}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "watcher-identity", "exec"), namespace)
+        return ((lifeline._start_token, ""), (namespace["start_of"], None))
+
+    def test_identity_survives_process_state_changes(self):
+        for reader, _ in self.readers():
+            with self.subTest(reader=reader.__name__), mock.patch.object(subprocess, "run") as run:
+                run.return_value = SimpleNamespace(stdout="Mon Oct 19 15:00:00 2026 R\n")
+                first = reader(123)
+                self.assertTrue(first)
+                run.return_value = SimpleNamespace(stdout="Mon Oct 19 15:00:00 2026 Sl\n")
+                self.assertEqual(reader(123), first)
+                run.return_value = SimpleNamespace(stdout="Mon Oct 19 15:00:01 2026 Sl\n")
+                self.assertNotEqual(reader(123), first)
+
+    def test_zombies_and_missing_processes_have_no_identity(self):
+        for reader, missing in self.readers():
+            for output in ("", "Mon Oct 19 15:00:00 2026 Z", "Mon Oct 19 15:00:00 2026 Z+"):
+                with self.subTest(reader=reader.__name__, output=output), \
+                     mock.patch.object(subprocess, "run", return_value=SimpleNamespace(stdout=output)):
+                    self.assertEqual(reader(123), missing)
+
 
 SERVER = textwrap.dedent("""
     import os, sys, time, threading, subprocess
