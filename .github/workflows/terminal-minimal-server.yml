@@ -59,6 +59,10 @@ jobs:
                           '--report', str(report)], check=True)
           print(report.read_text())
           PY
+      - name: Check process lifelines before the full server suite
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/strata-runtime-venv/bin/python" -m unittest serve.test_lifeline -v
       - name: Run full server suite without terminal packages
         shell: bash
         run: |

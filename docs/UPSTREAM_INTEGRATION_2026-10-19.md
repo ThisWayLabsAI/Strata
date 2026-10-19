@@ -33,6 +33,14 @@ Subsequent `7e7d78b3` changes one test, not runtime code: Linux full-suite CI ex
 The cleanup regression now identifies and joins its own server's sampler instead of comparing counts affected by earlier tests.
 Its focused local run passed. Full runtime-only CI is tracked on PR #6; the initial failure must not be represented as a passing run.
 
+One full Linux rerun then passed 972 tests (14 skips), while its parallel run exposed an additional portable-watcher bug.
+The parent and watcher included `ps` process state in their start token; an ordinary R-to-S transition could make the same child
+look like a different process and refuse cleanup. Both token readers now use the stable start time and recognize zombie state
+prefixes. Two deterministic regressions failed before and pass after the fix, including mutable state and `Z+` cases.
+The final local process suite ran 11 tests, nine passed and two POSIX-only tests skipped on Windows. The Windows job-object path,
+native engine and tested GPU runtime behavior are unchanged. Linux CI runs the real process-lifeline suite explicitly before the
+broader suite so a process-cleanup regression fails earlier. Current-head CI remains the release gate.
+
 ## Native gate passed
 
 On the RTX 3090 24576 MiB, driver 616.92, the existing elevated Stop control succeeded after Windows UAC approval.
