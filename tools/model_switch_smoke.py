@@ -23,12 +23,16 @@ from model_registry_config import build
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", type=Path, help="test this separately built engine; source configs remain unchanged")
+    parser.add_argument("--configs", type=Path, nargs=2,
+                        default=[ROOT / "strata-dev-original.json", ROOT / "strata-dev-sc117.json"],
+                        metavar=("ORIGINAL", "SC117"),
+                        help="existing dev configs to read when testing from an isolated worktree")
     args = parser.parse_args()
     if listening(8080) or listening(8081):
         raise RuntimeError("Stop live and other GPU servers before running this gate")
     folder = DATA / "logs" / ("model-switch-native-" + time.strftime("%Y%m%d-%H%M%S"))
     folder.mkdir(parents=True, exist_ok=False)
-    paths = [ROOT / "strata-dev-original.json", ROOT / "strata-dev-sc117.json",
+    paths = [*args.configs,
              Path(r"C:\AI\Strata\strata-iq2_xs.json"), Path(r"C:\AI\Strata\strata-sc117-iq2_xs.json")]
     before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
     cfg = build(paths[:2])
