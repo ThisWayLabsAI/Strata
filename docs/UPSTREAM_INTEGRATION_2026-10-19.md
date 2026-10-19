@@ -29,6 +29,13 @@ Integration CPU run: 794 tests, 783 passed and 11 documented platform/optional-d
 All 15 standalone CPU state/cache tests passed. The CUDA 13.3/MSVC portable sm_86 engine and `strata_kq.dll` built successfully,
 and the executable reports `strata 0.1.45.3`. Native GPU behavior is not established by these results.
 
+The tested merge is `420f242a`, published as [draft PR #6](https://github.com/ThisWayLabsAI/Strata/pull/6).
+The existing elevated Stop control requested Windows UAC; Windows returned “The operation was canceled by the user.”
+No live stop or native test occurred. Live remains at `4d460156`; GPU validation and local speed comparisons are deferred.
+Do not describe this candidate as native-validated, merged into stable, or deployed. Resume only after an authorized successful
+Stop-control invocation and independent zero-listener/worker checks. The prepared wrapper in the Codex task workspace restores
+the unchanged live service through the scheduled task after its test window.
+
 Before any native run, check idle live and all four config hashes; stop through the existing controls and independently verify zero
 live/dev listeners and native workers. Restore the unchanged live source/engine/task after testing. Do not deploy from a successful build alone.
 Keys, models, packs, runtime config values, packages, controls and task settings remain preserved. Camera changes remain experimental.
