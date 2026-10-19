@@ -1,9 +1,9 @@
 # Upstream 0.2.0-beta integration, 2026-10-19
 
 Candidate branch: `update/upstream-0.2.0-beta-20261019`, from stable `4d460156` and pinned upstream
-`e88ee39d1d6be6e3364183af3b39b62a7ed6f211`. Native validation passed in isolation. Stable/live remain
-`4d460156`; this update is not merged into stable or deployed. [PR #6](https://github.com/ThisWayLabsAI/Strata/pull/6)
-tracks review and CI separately from deployment.
+`e88ee39d1d6be6e3364183af3b39b62a7ed6f211`. Native validation passed in isolation.
+[PR #6](https://github.com/ThisWayLabsAI/Strata/pull/6) merged at `515200d7` after checks passed;
+that application revision and the tested engine 0.1.45.3 are now deployed. See the deployment entry below.
 
 ## Compatibility changes
 
@@ -81,13 +81,13 @@ Evidence: `C:\AI\Strata-data\logs\upstream-engine-compare-20261019-155628\report
 The comparison passed and removed its temporary private config. Candidate engine SHA-256:
 `965a42ad63a8c730b31a28c4a8e568d66234a3d577439f3ade831773220d171b`.
 
-## Live restored unchanged
+## Live restored unchanged after isolated testing (before deployment)
 
 After independent worker/listener cleanup, the unchanged `Strata - Qwen` scheduled task restarted live.
 Health, Original selection with no load error, API 401 rejection without a key, three web MCP tools, closed dev/fixture ports,
 unchanged source `4d460156`, unchanged installed engine hash and all four config hashes passed verification.
 Temporary credential-bearing configs were removed. The wrapper report is `integration-native-evidence/report.json` in the Codex task workspace.
-Live remains the prior tested release, available with lazy loading. The candidate engine is still only in its separate build directory.
+At that stage live remained the prior tested release, available with lazy loading; the candidate engine was only in its separate build directory.
 
 Before any native run, check idle live and all four config hashes; stop through the existing controls and independently verify zero
 live/dev listeners and native workers. Restore the unchanged live source/engine/task after testing. Do not deploy from a successful build alone.
@@ -96,3 +96,23 @@ Keys, models, packs, runtime config values, packages, controls and task settings
 Local evidence begins in the Codex task workspace: `integration-cuda-build.log`, `integration-cpu-build-tests.log`,
 `upstream-assessment-2026-10-19/integration-mocks.log`, and the dated assessment report. Native reports and outputs belong under
 `C:\AI\Strata-data\logs`; temporary credential-bearing configs must be deleted after their owned servers stop.
+
+## Authorized deployment, 2026-10-19
+
+After the user authorized deployment and approved Windows UAC, the existing Stop control completed successfully.
+Independent checks found no live/dev listeners or native workers before fast-forwarding live to merged `515200d7`.
+The hardware-tested `strata.exe` and `strata_kq.dll` were installed; the existing GPU vision executable was retained.
+The unchanged scheduled task restarted live. `/v1/status` reports engine 0.1.45.3 and 131072 context.
+
+Post-deployment checks passed: health, unauthenticated API rejection (401), both switchable chat IDs plus the image model,
+three web MCP tools and max_rounds=16, all 16 served UI/font assets matching disk, and three native chat requests
+in Original → SC117 → Original order. Every response used the selected model ID and answered 17 × 23 with 391.
+Final health is OK with Original selected, vision available, and no load error. All four config hashes are unchanged.
+The verification script initially counted the image model as a third chat model; filtering on `switchable` corrected
+that test expectation. No runtime change was needed.
+
+Rollback source `4d460156` is retained as `rollback/pre-upstream-0.2.0-20261019`.
+Matching old engine/DLL/build metadata, private config backups, verified hashes and rollback instructions are in
+`C:\AI\Strata-data\backups\upstream-0.2.0-deploy-20261019-1`, alongside `deployment-live-checks.json`
+and `engine-install-report.json`. Rollback uses the coordinated Stop/shutdown/start gate and preserves user data.
+The initial UAC attempt was canceled; that attempt left live unchanged. The successful retry is the deployment recorded here.
