@@ -1,6 +1,14 @@
 # Thiswaylabs Strata handoff
 
-Updated 2026-10-17. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+Updated 2026-10-19. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+
+## Current release: upstream 0.2.0-beta deployed
+
+Application `515200d7`, merged through [PR #6](https://github.com/ThisWayLabsAI/Strata/pull/6), is deployed with locally built CUDA 13.3 sm_86 engine **0.1.45.3** on the RTX 3090. It includes upstream `e88ee39d` and preserves the fork's per-conversation Original Qwen/SC117 selection, UI, image editing and shared Monitor key. [The integration report](UPSTREAM_INTEGRATION_2026-10-19.md) records mock/browser/CI results, both-model native vision/tool/image/cancellation gates, and preliminary throughput comparisons. The earlier release entries below are historical.
+
+The user approved deployment and Windows UAC for the unchanged Stop control. Idle live and zero listeners/native workers were checked before the fast-forward and engine/DLL replacement. The unchanged scheduled task restarted live. Post-deployment checks passed: health, engine version, unauthenticated API 401, both switchable chat IDs and the existing image model, 131072 context, three MCP tools with max_rounds=16, 16 served asset hashes, and Original → SC117 → Original native inference (each returned 391 for 17 × 23). Original is selected with no load error. All four config hashes and the vision binary are unchanged; no packages, models, packs, keys, controls, task settings or user history were changed.
+
+Rollback branch `rollback/pre-upstream-0.2.0-20261019` retains tested source `4d460156`. Matching engine 0.1.45, DLL, build metadata, vision binary, four private configs, manifest and rollback instructions are backed up at `C:\AI\Strata-data\backups\upstream-0.2.0-deploy-20261019-1`. The same directory contains `deployment-live-checks.json` and `engine-install-report.json`. Roll back source and matching engine under the same Stop/shutdown/start gate; retain current user data and only restore configs when necessary. Camera remains experimental; long-context quality and other GPU backends were not validated locally.
 
 ## Current release: API Monitor shares the Chat key
 
