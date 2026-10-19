@@ -1,5 +1,9 @@
 # Per-conversation model switching
 
+Upstream 0.2.0 integration retains strict context validation for registry-enabled startup configs unless
+`fit_max_tokens: true` or `--fit-max-tokens` explicitly enables shortening the requested output budget.
+Single-model startup follows upstream's fitting default. Prompt history is never silently truncated.
+
 Deployed locally on 2026-10-15 from application `54caf337`, based on previous live `0b7f7517`, after explicit user authorization. Native API and browser switching passed before deployment. The live Original startup config now opts in through a two-model registry; Original remains the startup default. Both local stable `thiswaylabs` checkouts include the release. GitHub publication remains pending authentication.
 
 Refresh the app to see **Conversation model**. At keyboard height, use **Model** to open the selector. Selection applies on Send, can take about 20 seconds to load on the tested PC, and stays with the browser's current conversation. Both Original and SC117 returned `391` with correct actual response IDs in the deployed live browser; selection and response metadata survived refresh. Live health, three web MCP tools, unauthenticated chat rejection (401), and served HTML/JS/CSS hashes passed verification. No additional native image job was required for deployment; the preceding native gate exercised both models' image handoffs.
