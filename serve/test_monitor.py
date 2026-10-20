@@ -198,6 +198,70 @@ class Monitor(unittest.TestCase):
         self.assertEqual(self.request("/web/../server.py")[0], 404)
 
 
+    def test_private_requests_skip_capture_in_both_dialects_and_stream_modes(self):
+        for api in ("openai", "anthropic"):
+            for stream in (False, True):
+                with self.subTest(api=api, stream=stream):
+                    code, reply = self.chat(api, stream=stream, strata_private=True)
+                    self.assertEqual(code, 200)
+                    if stream:
+                        events = [json.loads(line[5:]) for line in reply.splitlines()
+                                  if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+                        content = "".join((event.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                                          if api == "openai" else event.get("delta", {}).get("text", "")
+                                          for event in events)
+                    else:
+                        content = str(reply)
+                    self.assertIn("Hello", content)
+                    self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+                    self.assertEqual(len(self.svc.api_requests), 0)
+        self.chat(strata_private=False)
+        self.assertIn("Say hello.", self.latest()["input"])
+
+    def test_private_responses_and_errors_are_not_captured(self):
+        for stream in (False, True):
+            code, reply = self.request("/v1/responses", {"input": "private-responses-marker", "max_output_tokens": 128,
+                                                       "strata_private": True, "stream": stream})
+            self.assertEqual(code, 200, reply)
+        code, reply = self.chat(strata_private=True, temperature="private-invalid-marker")
+        self.assertEqual(code, 400)
+        self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+
+    def test_privacy_flag_requires_a_boolean(self):
+        for value in ("true", "false", 1, None, {}):
+            code, _ = self.chat(strata_private=value)
+            self.assertEqual(code, 400, value)
+        self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+
+    def test_private_live_text_preview_is_not_retained(self):
+        from serve.frontend import Event
+        self.svc.request_trace.private = True
+        self.svc._note(1, [Event("content", "private-live-marker")])
+        self.assertNotIn("tail", self.svc.status)
+        self.assertNotIn("private-live-marker", json.dumps(self.request("/status")[1]))
+        self.svc.request_trace.private = False
+        self.svc._note(1, [Event("content", "ordinary-live-marker")])
+        self.assertIn("ordinary-live-marker", self.svc.status["tail"])
+
+    def test_private_stream_is_absent_from_monitor_while_active(self):
+        self.engine.delay_s = .015
+        req = urllib.request.Request(self.base + "/v1/chat/completions",
+                                     data=json.dumps({"messages": [{"role": "user", "content": "private-active-marker"}],
+                                                      "max_tokens": 256, "stream": True, "strata_private": True}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            for line in response:
+                if line.startswith(b"data:") and line[5:].strip() != b"[DONE]":
+                    chunk = json.loads(line[5:])
+                    if chunk.get("choices", [{}])[0].get("delta", {}).get("content"):
+                        break
+            self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+            status = self.request("/status")[1]
+            self.assertTrue(status.get("busy"))
+            self.assertFalse(status.get("tail"))
+            response.read()
+
+
 class ConversationCacheCard(unittest.TestCase):
     """#596: /metrics' "conversation_cache": the parked conversations from the engine's log lines, the budget and
     slots from its INFO line, and how much of the prompts the cache gave back."""

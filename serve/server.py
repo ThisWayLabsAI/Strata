@@ -3422,6 +3422,7 @@ class Service:
         self.admission_changed = threading.Condition(self.status_lock)
         self.mcp = None                                  # serve/mcp.py's McpHub when MCP servers are configured
         self.offline = False                             # no image URL fetch or MCP subprocess in strict local mode
+        self.vision_input_policy = "legacy"              # opt-in uploads_only never reads a client's file/URL
         self.telemetry_key = ""                         # optional read-only key, valid only on /v1/telemetry
         # sharing the GPU with other programs (all off by default): unload the engine after this many idle seconds,
         # only start it again when this much VRAM is free, and run this command first (e.g. to unload another
@@ -4062,7 +4063,7 @@ class Service:
 
     def begin_request(self, path, req):
         """#332: a monitor record for this request, or None when the monitor is off (nothing is kept then)."""
-        if not self.api_monitor:
+        if not self.api_monitor or req.get("strata_private") is True:
             return None
         raw = json.dumps(req, ensure_ascii=False, indent=2)
         record = {"id": uuid.uuid4().hex[:12], "path": path, "model": req.get("model") or self.model,
@@ -4210,7 +4211,8 @@ class Service:
             "concurrency": {"serving": max(1, int(getattr(self.engine, "batch", 0) or 0)),
                             "requested": getattr(self, "requested_slots", max(1, int(getattr(self.engine, "batch", 0) or 0)))},
             "dialects": ["/v1/chat/completions", "/v1/messages", "/v1/responses"],
-            "vision": {"enabled": images, "available": images, "error": None},
+            "vision": {"enabled": images, "available": images, "error": None,
+                       **({"input_policy": self.vision_input_policy} if self.vision_input_policy != "legacy" else {})},
             "image_generation": self.images.status() if self.images is not None else {"enabled": False},
             "activity": {"requests": totals["requests"] + running,
                          "in_flight": running + int(s.get("queued") or 0),
@@ -4275,6 +4277,12 @@ class Service:
         finally:
             self.fifo.release()
 
+    def validate_vision_inputs(self, messages):
+        if self.vision_input_policy == "uploads_only":
+            for source in images_of(messages):
+                if not isinstance(source, str) or not source.startswith("data:image/") or ";base64," not in source:
+                    raise ValueError("vision_input_policy uploads_only: send uploaded image bytes as a base64 data:image/ URL; server file paths and HTTP(S) URLs are disabled")
+
     def _note_unreadable_tool_images(self, messages, cancel=None):
         """A picture a tool returned (Claude Code's Read of an image file) that this server cannot read - it has no
         image encoder, or the encoder refuses that picture - becomes a short note in its place instead of a 400.
@@ -4319,6 +4327,7 @@ class Service:
         prompt; with thinking, Service.run writes it once the thinking is over."""
         # `cancel` (#1999): set when the client hangs up; the downloads, the wait for the turn and the encodes stop
         # between pictures and raise ClientGone
+        self.validate_vision_inputs(messages)            # before tool-image reads or any URL download
         fetched = self._note_unreadable_tool_images(messages, cancel)
         ids = encoded_ids = self.encode_prompt(messages, tools, kwargs)
         if force and kwargs.get("enable_thinking", True) is False:
@@ -4512,10 +4521,17 @@ class Service:
                 elif ev.kind == "content":
                     s["phase"] = "answering"
                 elif ev.kind == "tool_start":
-                    s["phase"], s["tool"] = f"writing a tool call: {ev.call.name}", ev.call.name
+                    if getattr(self.request_trace, "private", False):
+                        s["phase"] = "writing a tool call"
+                    else:
+                        s["phase"], s["tool"] = f"writing a tool call: {ev.call.name}", ev.call.name
                 elif ev.kind == "tool_call":
                     s["phase"] = "tool call complete"
-                s["tail"] = ((s.get("tail") or "") + (ev.text or ""))[-600:]
+                if getattr(self.request_trace, "private", False):
+                    s.pop("tail", None)
+                    s.pop("tool", None)
+                else:
+                    s["tail"] = ((s.get("tail") or "") + (ev.text or ""))[-600:]
 
     def _progress(self, last_print, every=1.0, st=None):
         """A progress line in the server window every `every` seconds while a request runs."""
@@ -5571,6 +5587,13 @@ def body_limit() -> int:
     return mib << 20 if mib > 0 else CHUNKED_BODY_MAX
 
 
+def vision_input_policy_of(cfg: dict) -> str:
+    policy = cfg.get("vision_input_policy", "legacy")
+    if policy not in ("legacy", "uploads_only"):
+        raise ValueError('vision_input_policy must be "legacy" or "uploads_only"')
+    return policy
+
+
 class BadBody(Exception):
     """A request body that cannot be read (a malformed or oversized chunked body): the status and the sentence."""
 
@@ -6285,6 +6308,9 @@ def make_handler(svc: Service):
                 req = json.loads(self._body() or b"{}")
                 if not isinstance(req, dict):
                     raise ValueError("send a JSON object")
+                if not isinstance(req.get("strata_private", False), bool):
+                    raise ValueError("strata_private must be true or false")
+                svc.request_trace.private = req.get("strata_private") is True
                 if svc.model_registry is not None:
                     if path.startswith("/slots/"):
                         raise ValueError("manual session save/restore is unavailable with model switching; resend conversation history")
@@ -6426,6 +6452,7 @@ def make_handler(svc: Service):
                         record["finished_at"] = time.time()
                         record["state"] = "error" if record.get("error") else record.get("outcome", "completed")
                     svc.request_trace.record = None
+                svc.request_trace.private = False
 
         def _images(self, req, edit=False):
             """POST /v1/images/generations (serve/images.py): one sd-cli job in the GPU's turn."""
@@ -6584,6 +6611,7 @@ def make_handler(svc: Service):
             in (["*"]: every page) could name any file and, CORS allowing, read what the model says about it.  data:
             and http(s) images are the page's own to send; files come from Strata's own page, a trusted origin or a
             client that is no browser.  ValueError (a 400)."""
+            svc.validate_vision_inputs(messages)
             if self._foreign_origin() and any(not src.startswith(("data:", "http://", "https://"))
                                               for src in images_of(messages)):
                 raise ValueError("a web page of another origin cannot have a file on this computer read as an "
@@ -6931,15 +6959,19 @@ def make_handler(svc: Service):
             read for the same request, rendered and tokenized - the model does not run."""
             req = svc.with_shared(req, "anthropic")
             messages, tools, kw = anthropic_to_messages(req, svc.anthropic_think_unasked)
+            svc.validate_vision_inputs(messages)
             stop_strings(req)                                 # the same 400 as the request itself would get
             check_request_sampling(req)                       # ... likewise a sampling field of the wrong type
             self._json(200, {"input_tokens": len(svc.encode_prompt(messages, tools, kw, store=False))})
 
         def _anthropic(self, req):
-            svc.load()
+            if svc.vision_input_policy == "legacy":
+                svc.load()
             req = svc.with_shared(req, "anthropic")
             messages, tools, kw = anthropic_to_messages(req, svc.anthropic_think_unasked)
             self._no_local_images(messages)
+            if svc.vision_input_policy != "legacy":
+                svc.load()
             if tool_choice_of(req.get("tool_choice"))[0] == "none":   # Anthropic's {"type": "none"}: no tools offered
                 tools = None
             force = forced_call(req.get("tool_choice"), tools)        # "any" / {"type": "tool", "name": N}
@@ -7783,6 +7815,10 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
         ap.error("--shutdown-timeout must be in 0..300 seconds")
     config_bytes = Path(a.config).read_bytes() if a.config else b""
     cfg = parse_config_text(config_bytes.decode("utf-8-sig"), a.config) if a.config else {}   # Notepad adds a BOM
+    try:
+        vision_policy = vision_input_policy_of(cfg)
+    except ValueError as exc:
+        ap.error(str(exc))
     split_joined_args(cfg)
     if a.config and a.engine == "strata":
         cfg = apply_saved_tuning(cfg)
@@ -7963,6 +7999,7 @@ def main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> in
                   fit_max_tokens=fit_max_tokens_of(cfg, a.fit_max_tokens, a.no_fit_max_tokens))
     svc.launch_attestation = launch_attestation
     svc.offline = a.offline
+    svc.vision_input_policy = vision_policy
     svc.max_queue = max_queue
     svc.queue_timeout_s = float(queue_timeout) if queue_timeout is not None else None
     if a.engine == "strata":                            # the model card's sampling when nothing else is said (see MODEL_CARD_SAMPLING)
