@@ -2,6 +2,16 @@
 
 Updated 2026-10-19. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
 
+## Local security maintenance, 2026-10-19
+
+The `Strata - Qwen` task now runs as Steven with **Limited** privileges. Its user, actions, triggers and other settings are preserved. The background launcher refuses administrator startup and writes `C:\AI\Strata-data\logs\strata-startup-security.json`; use normal launchers. Stop requests shutdown of the specifically configured task, ends owned servers and waits for native cleanup, retaining ancestry/PID/creation checks for manual instances. Controls and the dedicated tool environment have restricted permissions. The task and server token were verified non-elevated; Windows denied direct inspection of some child tokens, which is recorded rather than treated as proof of their state.
+
+All four live/dev configs now launch the dedicated web MCP executable at `C:\AI\Strata-tools\web-0.7.0\Scripts\duckduckgo-mcp-server.exe`. Its 45 package versions and distribution hashes are locked in `requirements.lock`; no resolver runs at service startup. Only each web tool's command/args changed. Runtime pip is 26.2.1; other runtime packages, engine 0.1.45.3, keys, models, packs, GPU policy and user history are preserved. Monitor retention, private-chat behavior, vision input capabilities and the separate Tailscale service configuration are preserved.
+
+Post-maintenance checks passed: Original → SC117 → Original native inference, image generation/GPU handoff/resumed vision, real web search through the pinned MCP, 30 HTTP security probes, intended-only config differences, and normal Stop with loaded native workers followed by independent cleanup and guarded restart. The service is healthy with Original as startup default; lazy-unloaded startup is expected. Native engine/vision hashes are unchanged. The current local record distinguishes the initial failed verification attempts from these final passing results.
+
+The private maintenance record, exact task/ACL/config backups, lockfile, scripts and rollback instructions are in `C:\AI\Strata-data\backups\security-hardening-20261019-1`. Read `SECURITY_HARDENING_2026-10-19.txt` there before troubleshooting or rollback; it contains the actual verification results and known limits. The controls README and fork workflow contain current operator guidance. Do not restore old privileges or whole configs as a routine fix, and never clean model/chat data. The earlier deployment entries below describe their state at the time.
+
 ## Current release: upstream 0.2.0-beta deployed
 
 Application `515200d7`, merged through [PR #6](https://github.com/ThisWayLabsAI/Strata/pull/6), is deployed with locally built CUDA 13.3 sm_86 engine **0.1.45.3** on the RTX 3090. It includes upstream `e88ee39d` and preserves the fork's per-conversation Original Qwen/SC117 selection, UI, image editing and shared Monitor key. [The integration report](UPSTREAM_INTEGRATION_2026-10-19.md) records mock/browser/CI results, both-model native vision/tool/image/cancellation gates, and preliminary throughput comparisons. The earlier release entries below are historical.
