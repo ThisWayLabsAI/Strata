@@ -244,22 +244,32 @@ class Monitor(unittest.TestCase):
         self.assertIn("ordinary-live-marker", self.svc.status["tail"])
 
     def test_private_stream_is_absent_from_monitor_while_active(self):
-        self.engine.delay_s = .015
-        req = urllib.request.Request(self.base + "/v1/chat/completions",
-                                     data=json.dumps({"messages": [{"role": "user", "content": "private-active-marker"}],
-                                                      "max_tokens": 256, "stream": True, "strata_private": True}).encode(),
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            for line in response:
-                if line.startswith(b"data:") and line[5:].strip() != b"[DONE]":
-                    chunk = json.loads(line[5:])
-                    if chunk.get("choices", [{}])[0].get("delta", {}).get("content"):
-                        break
-            self.assertEqual(self.request("/api/requests")[1]["requests"], [])
-            status = self.request("/status")[1]
-            self.assertTrue(status.get("busy"))
-            self.assertFalse(status.get("tail"))
-            response.read()
+        entered, release = threading.Event(), threading.Event()
+        original_note = self.svc._note
+
+        def note(n, evs, st=None, rate=None):
+            original_note(n, evs, st, rate)
+            if any(ev.kind == "content" for ev in evs):
+                entered.set()
+                self.assertTrue(release.wait(5))
+
+        # Hold generation after its real preview update, independently of HTTP buffering.
+        with mock.patch.object(self.svc, "_note", side_effect=note), ThreadPoolExecutor(max_workers=1) as pool:
+            response = pool.submit(self.chat, stream=True, strata_private=True)
+            try:
+                self.assertTrue(entered.wait(5))
+                self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+                status = self.request("/status")[1]
+                self.assertTrue(status.get("busy"))
+                self.assertFalse(status.get("tail"))
+            finally:
+                release.set()
+            code, reply = response.result()
+            self.assertEqual(code, 200)
+            chunks = [json.loads(line[5:]) for line in reply.splitlines()
+                      if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+            content = "".join(chunk["choices"][0].get("delta", {}).get("content", "") for chunk in chunks)
+            self.assertIn("Hello", content)
 
 
 class ConversationCacheCard(unittest.TestCase):
