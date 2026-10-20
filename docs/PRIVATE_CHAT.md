@@ -1,6 +1,10 @@
 # Private chat
 
-Application `886d49e0`, developed on `feature/private-chat` from `767b034c`, is deployed locally in `C:\AI\Strata`. Refresh the app to use the toggle. This is browser-local chat privacy, with no changes to server logging, API monitoring, native inference or tools.
+The Private chat toggle combines browser-local non-persistence with per-request API Monitor exclusion. Refresh the app after deployment to send the new `strata_private: true` request field. Older pages do not send it. The original browser-only release was `886d49e0`; its deployment/validation notes below are historical.
+
+The server accepts the optional Boolean `strata_private` field on Chat Completions, Messages and Responses requests. With `true`, API Monitor retains no input/output/reasoning, errors or tool events for that request. Private inference also suppresses live text/tool-name previews in `/status` and `/metrics`. Ordinary requests keep existing capture behavior; leaving private mode starts a new saved conversation and ordinary capture resumes. Invalid non-Boolean values are rejected. The field does not bypass authentication or erase earlier captured requests.
+
+Request counts, timing/token/hardware statistics and active model state remain visible. The flag does not disable server/native/tool logs, prompt caches, image-handoff snapshots, or explicit exports/downloads. It is not a server-wide zero-retention mode. API clients can use the same field; they must send it on every private request.
 
 The **Private chat** checkbox beside the thread title defaults off. Enabling it keeps the current history, draft, model and attached inputs in memory. It drains saves already queued before activation, cancels the pending draft timer and starts a distinct ephemeral conversation. It does not flush the draft at activation. Earlier content already saved to the library remains there; remove that saved thread explicitly if desired. The header shows **Chats · Private**, including when the thread heading has scrolled away.
 

@@ -1267,6 +1267,7 @@ async function send() {
 
   const body = {model: modelSelection ? (conversationModel || modelSelection.default_model) : health.model, messages: apiMessages(), stream: true,
                 reasoning_effort: settings.thinking};
+  if (isPrivateChat()) body.strata_private = true;
   if (!(settings.temperature > 0)) {
     body.temperature = 0;
   } else if (!samplingUntouched(settings)) {

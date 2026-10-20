@@ -198,6 +198,80 @@ class Monitor(unittest.TestCase):
         self.assertEqual(self.request("/web/../server.py")[0], 404)
 
 
+    def test_private_requests_skip_capture_in_both_dialects_and_stream_modes(self):
+        for api in ("openai", "anthropic"):
+            for stream in (False, True):
+                with self.subTest(api=api, stream=stream):
+                    code, reply = self.chat(api, stream=stream, strata_private=True)
+                    self.assertEqual(code, 200)
+                    if stream:
+                        events = [json.loads(line[5:]) for line in reply.splitlines()
+                                  if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+                        content = "".join((event.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                                          if api == "openai" else event.get("delta", {}).get("text", "")
+                                          for event in events)
+                    else:
+                        content = str(reply)
+                    self.assertIn("Hello", content)
+                    self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+                    self.assertEqual(len(self.svc.api_requests), 0)
+        self.chat(strata_private=False)
+        self.assertIn("Say hello.", self.latest()["input"])
+
+    def test_private_responses_and_errors_are_not_captured(self):
+        for stream in (False, True):
+            code, reply = self.request("/v1/responses", {"input": "private-responses-marker", "max_output_tokens": 128,
+                                                       "strata_private": True, "stream": stream})
+            self.assertEqual(code, 200, reply)
+        code, reply = self.chat(strata_private=True, temperature="private-invalid-marker")
+        self.assertEqual(code, 400)
+        self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+
+    def test_privacy_flag_requires_a_boolean(self):
+        for value in ("true", "false", 1, None, {}):
+            code, _ = self.chat(strata_private=value)
+            self.assertEqual(code, 400, value)
+        self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+
+    def test_private_live_text_preview_is_not_retained(self):
+        from serve.frontend import Event
+        self.svc.request_trace.private = True
+        self.svc._note(1, [Event("content", "private-live-marker")])
+        self.assertNotIn("tail", self.svc.status)
+        self.assertNotIn("private-live-marker", json.dumps(self.request("/status")[1]))
+        self.svc.request_trace.private = False
+        self.svc._note(1, [Event("content", "ordinary-live-marker")])
+        self.assertIn("ordinary-live-marker", self.svc.status["tail"])
+
+    def test_private_stream_is_absent_from_monitor_while_active(self):
+        entered, release = threading.Event(), threading.Event()
+        original_note = self.svc._note
+
+        def note(n, evs, st=None, rate=None):
+            original_note(n, evs, st, rate)
+            if any(ev.kind == "content" for ev in evs):
+                entered.set()
+                self.assertTrue(release.wait(5))
+
+        # Hold generation after its real preview update, independently of HTTP buffering.
+        with mock.patch.object(self.svc, "_note", side_effect=note), ThreadPoolExecutor(max_workers=1) as pool:
+            response = pool.submit(self.chat, stream=True, strata_private=True)
+            try:
+                self.assertTrue(entered.wait(5))
+                self.assertEqual(self.request("/api/requests")[1]["requests"], [])
+                status = self.request("/status")[1]
+                self.assertTrue(status.get("busy"))
+                self.assertFalse(status.get("tail"))
+            finally:
+                release.set()
+            code, reply = response.result()
+            self.assertEqual(code, 200)
+            chunks = [json.loads(line[5:]) for line in reply.splitlines()
+                      if line.startswith("data:") and line[5:].strip() != "[DONE]"]
+            content = "".join(chunk["choices"][0].get("delta", {}).get("content", "") for chunk in chunks)
+            self.assertIn("Hello", content)
+
+
 class ConversationCacheCard(unittest.TestCase):
     """#596: /metrics' "conversation_cache": the parked conversations from the engine's log lines, the budget and
     slots from its INFO line, and how much of the prompts the cache gave back."""

@@ -63,6 +63,15 @@ class Switching(unittest.TestCase):
         self.assertEqual(self.chat("original")[1]["model"], "original")
         self.assertFalse(second.alive())
 
+    def test_uploads_only_policy_survives_model_switches(self):
+        self.svc.vision_input_policy = "uploads_only"
+        for model in ("sc117", "original"):
+            code, reply = self.chat(model, messages=[{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": "http://127.0.0.1/not-fetched"}}]}])
+            self.assertEqual(code, 400, reply)
+            self.assertIn("uploads_only", json.dumps(reply))
+            self.assertEqual(self.svc.vision_input_policy, "uploads_only")
+
     def test_switch_replaces_tokenizer_bound_prompt_cache_and_family(self):
         class ShiftedTokenizer(ByteTokenizer):
             def encode_marked(self, *args, **kwargs):
