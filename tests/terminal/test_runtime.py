@@ -21,7 +21,7 @@ from unittest import mock
 from strata_cli.cli import main
 from strata_cli import bench
 from strata_cli.client import Endpoint
-from strata_control import calibration, journal, management, owner_transport, profiles, recipes, runtime
+from strata_control import calibration, journal, management, owner_transport, procs, profiles, recipes, runtime
 
 
 WINDOWS = os.name == "nt"
@@ -31,7 +31,7 @@ WINDOWS = os.name == "nt"
 class RuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="strata-runtime-test-")
-        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(self._remove_temp)
         self.root = Path(self.temp.name)
         env = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(self.root / "profiles"),
                                        "STRATA_RUNTIME_DIR": str(self.root / "runtime")})
@@ -78,6 +78,19 @@ class RuntimeTests(unittest.TestCase):
                                             "host": "127.0.0.1", "port": 0}), encoding="utf-8")
         profiles.create("local", str(self.config))
         self.addCleanup(self._stop)
+
+    def _remove_temp(self):
+        # On Windows the stopped host can still hold runtime\local.host.log for a moment while it exits (seen on a GitHub runner): retry for
+        # up to 10 s, then fail with the path that stayed open
+        deadline = time.monotonic() + 10
+        while True:
+            try:
+                self.temp.cleanup()
+                return
+            except PermissionError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.25)
 
     def _stop(self):
         try:
@@ -224,7 +237,7 @@ class RuntimeTests(unittest.TestCase):
         def send(action, params):
             request = {"schema_version": 1, "action": action, "profile": "local", "params": params}
             completed = subprocess.run(command, input=json.dumps(request), text=True,
-                                       capture_output=True, cwd=root, env=os.environ.copy(), timeout=20)
+                                       capture_output=True, cwd=root, env=os.environ.copy(), timeout=120)
             return completed.returncode, json.loads(completed.stdout)
 
         code, invalid = send("runtime.start", {"wait_s": True, "shutdown_timeout_s": 2,
@@ -309,7 +322,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual((code, restart_plan["ok"]), (0, True))
         self.assertEqual(restart_plan["current_owner_id"], started["owner_id"])
         self.assertEqual(restart_plan["current_instance_id"], started["instance_id"])
-        restart_params = {"wait_s": 20, "startup_wait_s": 10,
+        restart_params = {"wait_s": 80, "startup_wait_s": 60,
                           "if_profile_revision": restart_plan["candidate_profile_revision"],
                           "if_owner_id": restart_plan["current_owner_id"],
                           "if_instance_id": restart_plan["current_instance_id"],
@@ -486,7 +499,7 @@ class RuntimeTests(unittest.TestCase):
                         process.stdout.close()
 
     def test_start_profile_revision_restart_and_stop(self):
-        code, started = self._cli("start", "--profile", "local", "--wait", "10",
+        code, started = self._cli("start", "--profile", "local", "--wait", "60",
                                   "--shutdown-timeout", "2")
         self.assertEqual(code, 0)
         self.assertEqual(started["state"], "ready")
@@ -503,7 +516,7 @@ class RuntimeTests(unittest.TestCase):
         status = self._cli("status", "--profile", "local")[1]
         self.assertEqual(status["instance_id"], first_id)
         self.assertNotIn("operation_id", status)
-        code, checked = self._cli("verify", "--profile", "local", "--wait", "10")
+        code, checked = self._cli("verify", "--profile", "local", "--wait", "60")
         self.assertEqual(code, 0)
         self.assertTrue(checked["verified_now"])
         self.assertTrue(checked["launch_attested"])
@@ -512,7 +525,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(checked_record["kind"], "runtime.verify")
         self.assertTrue(checked_record["result"]["launch_attested"])
         profiles.set_values("local", ["parallel=2"])
-        code, restarted = self._cli("restart", "--profile", "local", "--wait", "20")
+        code, restarted = self._cli("restart", "--profile", "local", "--wait", "80")
         self.assertEqual(code, 0)
         self.assertTrue(restarted["restarted"])
         self.assertTrue(restarted["launch_attested"])
@@ -531,7 +544,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsNone(runtime._read_state("local"))
 
     def test_cli_stop_plan_pins_the_reviewed_owner_and_instance(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         code, preview = self._cli("stop", "--profile", "local", "--plan")
         self.assertEqual(code, 0, preview)
@@ -556,7 +569,7 @@ class RuntimeTests(unittest.TestCase):
         cfg = json.loads(self.config.read_text(encoding="utf-8"))
         cfg["port"] = port
         self.config.write_text(json.dumps(cfg), encoding="utf-8")
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         identity = {"profile": "local", "revision": profiles.load("local")[1],
                     "source_sha256": hashlib.sha256(self.config.read_bytes()).hexdigest()}
@@ -571,7 +584,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(result["profile_running_check"]["after"]["matched"])
         output_json = io.StringIO()
         with redirect_stdout(output_json):
-            code = main(["bench", "run", "--profile", "local", "--require-managed-match",
+            code = main(["bench", "run", "--suite", "serving-smoke", "--profile", "local", "--require-managed-match",
                          "--concurrency", "1", "--out", str(self.root / "cli-managed"),
                          "--output", "json"])
         self.assertEqual(code, 0)
@@ -585,7 +598,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(any("running server config" in warning for warning in comparison["warnings"]))
 
     def test_owned_runtime_and_calibration_exclude_each_other_even_on_port_zero(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         output = self.root / "blocked-calibration.json"
         with self.assertRaisesRegex(profiles.ProfileError, "engine lease"):
@@ -596,10 +609,10 @@ class RuntimeTests(unittest.TestCase):
         with calibration._managed_exclusive():
             with self.assertRaisesRegex(profiles.ProfileError, "runtime host failed to start"):
                 runtime.start("local", wait=1, shutdown_timeout=2)
-        self.assertTrue(runtime.start("local", wait=10, shutdown_timeout=2)["ok"])
+        self.assertTrue(runtime.start("local", wait=60, shutdown_timeout=2)["ok"])
 
     def test_failed_new_port_rolls_back_previous_owned_launch(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         with socket.socket() as occupied:
             occupied.bind(("127.0.0.1", 0))
@@ -612,7 +625,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["instance_id"], result["instance_id"])
 
     def test_changed_source_is_rejected_before_stopping_old_instance(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         self.config.write_bytes(self.config.read_bytes() + b" ")
         for allow in (False, True):
@@ -624,7 +637,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["instance_id"], first["instance_id"])
 
     def test_edited_source_migration_is_previewed_digest_pinned_and_verified(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         edited = json.loads(self.config.read_text())
         edited["model_name"] = "edited-fake"
@@ -650,7 +663,7 @@ class RuntimeTests(unittest.TestCase):
         code, restarted = self._cli("restart", "--profile", "local", "--allow-source-migration",
                                     "--if-profile-revision", plan["candidate_profile_revision"],
                                     "--if-source-sha256", plan["candidate_source_sha256"],
-                                    "--startup-wait", "10", "--wait", "20")
+                                    "--startup-wait", "60", "--wait", "80")
         self.assertEqual(code, 0, restarted)
         self.assertTrue(restarted["source_migrated"])
         self.assertFalse(restarted["source_switched"])
@@ -665,7 +678,7 @@ class RuntimeTests(unittest.TestCase):
         original = json.loads(self.config.read_text())
         original["api_key"] = secret
         self.config.write_text(json.dumps(original), encoding="utf-8")
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         with socket.socket() as occupied:
             occupied.bind(("127.0.0.1", 0))
@@ -675,7 +688,7 @@ class RuntimeTests(unittest.TestCase):
             self.config.write_text(json.dumps(edited), encoding="utf-8")
             plan = runtime.plan_restart("local", allow_source_migration=True)
             code, result = self._cli("restart", "--profile", "local", "--allow-source-migration",
-                                     "--startup-wait", "5", "--wait", "20",
+                                     "--startup-wait", "30", "--wait", "80",
                                      "--if-source-sha256", plan["candidate_source_sha256"])
         self.assertEqual(code, 6)
         self.assertFalse(result["ok"])
@@ -700,14 +713,14 @@ class RuntimeTests(unittest.TestCase):
         # The edited file can be retried as a distinct source after freeing its port.
         plan = runtime.plan_restart("local", allow_source_switch=True)
         self.assertTrue(plan["source_switch"])
-        retried = runtime.restart("local", timeout=20, startup_wait=10,
+        retried = runtime.restart("local", timeout=20, startup_wait=60,
                                   allow_source_switch=True,
                                   expected_source_sha256=plan["candidate_source_sha256"])
         self.assertTrue(retried["ok"], retried)
         self.assertFalse(snapshot.exists())
 
     def test_explicit_source_switch_previews_and_restarts_new_config(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         next_config = self.root / "next-run.json"
         changed = json.loads(self.config.read_text())
@@ -746,9 +759,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["instance_id"], first["instance_id"])
         next_config.write_text(json.dumps(changed), encoding="utf-8")
         code, switched = self._cli("restart", "--profile", "local", "--allow-source-switch",
-                                   "--if-profile-revision", next_revision, "--wait", "20",
+                                   "--if-profile-revision", next_revision, "--wait", "80",
                                    "--if-source-sha256", preview["candidate_source_sha256"],
-                                   "--startup-wait", "10")
+                                   "--startup-wait", "60")
         self.assertEqual(code, 0, switched)
         self.assertTrue(switched["source_switched"])
         self.assertNotEqual(switched["instance_id"], first["instance_id"])
@@ -759,7 +772,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.plan_restart("local")["source_switch"], False)
 
     def test_failed_source_switch_restores_prior_owned_launch(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         with socket.socket() as occupied:
             occupied.bind(("127.0.0.1", 0))
@@ -772,7 +785,7 @@ class RuntimeTests(unittest.TestCase):
             proposed["source_config"] = str(next_config)
             profiles.save("local", proposed, expected_revision=revision)
             digest = hashlib.sha256(next_config.read_bytes()).hexdigest()
-            result = runtime.restart("local", timeout=20, startup_wait=5, allow_source_switch=True,
+            result = runtime.restart("local", timeout=20, startup_wait=30, allow_source_switch=True,
                                      expected_source_sha256=digest)
         self.assertFalse(result["ok"])
         self.assertTrue(result["rolled_back"])
@@ -781,7 +794,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["profile_revision"], revision)
 
     def test_source_switch_needs_unchanged_distinct_regular_rollback_file(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["ok"])
         hardlink = self.root / "same-inode.json"
         os.link(self.config, hardlink)
@@ -804,7 +817,7 @@ class RuntimeTests(unittest.TestCase):
                                        allow_source_migration=True)
         self.assertTrue(allowed["source_switch"])
         self.assertTrue(allowed["source_migration"])
-        result = runtime.restart("local", timeout=20, startup_wait=10,
+        result = runtime.restart("local", timeout=20, startup_wait=60,
                                  allow_source_switch=True, allow_source_migration=True,
                                  expected_source_sha256=allowed["candidate_source_sha256"])
         self.assertTrue(result["ok"], result)
@@ -830,7 +843,7 @@ class RuntimeTests(unittest.TestCase):
         cfg = json.loads(self.config.read_text())
         cfg["api_key"] = secret
         self.config.write_text(json.dumps(cfg))
-        result = runtime.start("local", wait=10, shutdown_timeout=2)
+        result = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(result["generation_ready"])
         self.assertTrue(result["launch_attested"])
         self.assertNotIn(secret, json.dumps(result))
@@ -845,16 +858,30 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(plan["effective"]["host"], "0.0.0.0")
         self.assertNotIn("first", json.dumps(plan))
 
+    def test_remote_bind_without_a_key_is_planned_not_refused(self):
+        # owner decision 2026-10-20: a key is recommended on a network, never required
+        from strata_cli.cli import _launch_plan
+        for key in (None, "none"):
+            cfg = json.loads(self.config.read_text())
+            cfg["host"] = "0.0.0.0"
+            cfg.pop("api_key", None)
+            if key:
+                cfg["api_key"] = key
+            self.config.write_text(json.dumps(cfg))
+            with mock.patch.dict(os.environ, {"STRATA_API_KEY": ""}):
+                plan, args = _launch_plan("local")
+            self.assertEqual(plan["effective"]["host"], "0.0.0.0")
+
     def test_lazy_model_is_verified_as_unloaded_without_generation(self):
         cfg = json.loads(self.config.read_text())
         cfg["lazy_load"] = True
         self.config.write_text(json.dumps(cfg))
-        result = runtime.start("local", wait=10, shutdown_timeout=2)
+        result = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(result["ok"])
         self.assertTrue(result["api_identity_verified"])
         self.assertFalse(result["generation_ready"])
         self.assertEqual((result["model_state"], result["readiness_state"]), ("unloaded", "unloaded"))
-        code, checked = self._cli("verify", "--profile", "local", "--wait", "10", "--load")
+        code, checked = self._cli("verify", "--profile", "local", "--wait", "60", "--load")
         self.assertEqual(code, 0)
         self.assertTrue(checked["generation_ready"])
         self.assertEqual(runtime.status("local")["model_state"], "ready")
@@ -864,23 +891,23 @@ class RuntimeTests(unittest.TestCase):
         engine = self.root / "engine.py"
         engine.write_text(engine.read_text().replace("        print('T 97', flush=True)",
                                                       "        print('ERR probe-failed', flush=True)\n        continue"))
-        result = runtime.start("local", wait=10, shutdown_timeout=2)
+        result = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertFalse(result["ok"])
         self.assertEqual(result["state"], "failed")
         self.assertEqual(result["error"], "probe_http_400")
 
     def test_zero_token_completion_does_not_count_as_generation_ready(self):
         (self.root / "empty-generation").write_text("empty")
-        result = runtime.start("local", wait=10, shutdown_timeout=2)
+        result = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"], "probe_generation_no_tokens")
 
     def test_explicit_verify_reports_later_engine_failure_without_stopping_instance(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["generation_ready"])
         flag = self.root / "fail-generation"
         flag.write_text("fail")
-        code, checked = self._cli("verify", "--profile", "local", "--wait", "10")
+        code, checked = self._cli("verify", "--profile", "local", "--wait", "60")
         self.assertEqual(code, 6)
         self.assertEqual(checked["error"], "probe_http_400")
         self.assertEqual(journal.load("local", checked["operation_id"])["state"], "failed")
@@ -889,7 +916,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(runtime.verify("local", timeout=10)["generation_ready"])
 
     def test_failed_generation_after_profile_edit_rolls_back_prior_launch(self):
-        first = runtime.start("local", wait=10, shutdown_timeout=2)
+        first = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(first["generation_ready"])
         engine = self.root / "engine.py"
         engine.write_text(engine.read_text().replace(
@@ -899,7 +926,7 @@ class RuntimeTests(unittest.TestCase):
             "            continue\n"
             "        print('T 97', flush=True)"))
         profiles.set_values("local", ["parallel=2"])
-        result = runtime.restart("local", timeout=30, startup_wait=10)
+        result = runtime.restart("local", timeout=30, startup_wait=60)
         self.assertFalse(result["ok"])
         self.assertTrue(result["rolled_back"])
         restored = runtime.status("local")
@@ -914,7 +941,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(journal.list_runs("local"), [])
 
     def test_restart_plan_compares_revision_without_stopping_instance(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         unchanged = runtime.plan_restart("local")
         self.assertTrue(unchanged["ok"])
@@ -938,7 +965,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_editable_recipe_previews_and_reruns_owned_instance(self):
         recipes.initialize("local")
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         profiles.set_values("local", ["parallel=2"])
         code, planned = self._ops("plan", "restart")
@@ -968,7 +995,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(len(journal.list_runs("local")), count)
 
     def test_stale_profile_revision_does_not_drain_owned_instance(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         previous = profiles.load("local")[1]
         profiles.set_values("local", ["parallel=2"])
@@ -985,7 +1012,7 @@ class RuntimeTests(unittest.TestCase):
 
     @unittest.skipIf(WINDOWS, "SIGTERM to a Windows process is TerminateProcess: the hard-kill test below covers it")
     def test_terminating_owner_host_stops_its_child_and_removes_state(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         os.kill(started["host_pid"], signal.SIGTERM)
         deadline = time.monotonic() + 8
@@ -997,7 +1024,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(owned.wait(timeout=3), 0)
 
     def test_hard_killed_host_child_exits_and_next_start_recovers_private_state(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         old_child = started["child_pid"]
         state = runtime._read_state("local")
@@ -1020,7 +1047,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual((stale["state"], stale["error"]), ("stale", "owner_host_lost"))
         # The next start waits for the inherited-pipe guard to stop the old
         # process group; it never sends a signal to the saved child PID.
-        replacement = runtime.start("local", wait=10, shutdown_timeout=2)
+        replacement = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(replacement["ok"])
         self.assertNotEqual(replacement["child_pid"], old_child)
         self.assertFalse(runtime._pid_exists(old_child))
@@ -1041,6 +1068,183 @@ class RuntimeTests(unittest.TestCase):
         marker.chmod(0o600)
         with self.assertRaisesRegex(profiles.ProfileError, "still present"):
             runtime.start("local", wait=0, shutdown_timeout=2)
+        self.assertTrue(state_path.exists())
+
+    # ---- round 0213 LIFECYCLE: the owner answers while it starts, leaves when its server is gone, and is recoverable at every point
+
+    def _slow_plan_owner(self, delay):
+        """An owner host in another process whose plan takes `delay` seconds (the slow imports, hardware questions and virus scans of #5177)."""
+        code = ("import time\n"
+                "from strata_control import runtime\n"
+                "original = runtime.Host._plan\n"
+                "def slow(self):\n"
+                f"    time.sleep({delay})\n"
+                "    return original(self)\n"
+                "runtime.Host._plan = slow\n"
+                "raise SystemExit(runtime.Host('local', shutdown_timeout=2).serve())\n")
+        owner = subprocess.Popen([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[2],
+                                 env=os.environ.copy(), stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: owner.poll() is None and (owner.kill(), owner.wait(timeout=5)))
+        deadline = time.monotonic() + 15
+        while runtime._read_state("local") is None and owner.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertIsNotNone(runtime._read_state("local"), "the owner did not publish its state")
+        return owner
+
+    def test_the_owner_answers_status_while_it_is_still_planning(self):                       # #5177
+        owner = self._slow_plan_owner(6)
+        began = time.monotonic()
+        for _ in range(3):
+            answer = runtime._rpc("local", "status", timeout=2)           # the old owner did not accept before its plan was done: this timed out
+            self.assertEqual((answer["state"], answer["phase"]), ("starting", "preparing"))
+            time.sleep(0.3)
+        self.assertLess(time.monotonic() - began, 5, "the status answers waited for the plan")
+        deadline = time.monotonic() + 40
+        answer = runtime._rpc("local", "status", timeout=2)
+        while answer["state"] == "starting" and time.monotonic() < deadline:
+            time.sleep(0.2)
+            answer = runtime._rpc("local", "status", timeout=2)
+        self.assertEqual(answer["state"], "ready", answer)
+        self.assertIsInstance(answer["child_pid"], int)
+
+    def test_a_stop_while_the_owner_plans_starts_no_server(self):                                # #5177
+        owner = self._slow_plan_owner(4)
+        state = runtime._read_state("local")
+        answer = self._send(state, state["token"], "stop")
+        self.assertTrue(answer["ok"], answer)
+        self.assertEqual(owner.wait(timeout=20), 0)
+        time.sleep(0.5)
+        self.assertFalse(list((self.root / "runtime").glob("*.server.log")) and
+                         any(p.stat().st_size for p in (self.root / "runtime").glob("*.server.log")), "a server was started after the stop")
+        self.assertIsNone(runtime._read_state("local"))
+
+    def test_a_start_keeps_asking_a_busy_owner_until_its_wait_is_over(self):                    # #5177: one missed answer is not a failed start
+        calls = []
+        real = runtime._rpc
+
+        def flaky(name, command, **kw):
+            if command == "status" and len(calls) < 2:
+                calls.append(kw.get("timeout"))
+                raise profiles.ProfileError("runtime operation wait expired; inspect runtime status", 8)
+            return real(name, command, **kw)
+        with mock.patch.object(runtime, "_rpc", flaky):
+            started = runtime.start("local", wait=30, shutdown_timeout=2)
+        self.assertTrue(started["ok"], started)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(x >= 1 for x in calls))
+
+    def test_a_lost_owner_is_still_a_failed_start_at_once(self):
+        def gone(name, command, **kw):
+            raise profiles.ProfileError("runtime control is unavailable; inspect the private host log", 3)
+        with mock.patch.object(runtime, "_rpc", gone), mock.patch.object(runtime, "_owner_alive", return_value=False):
+            with self.assertRaisesRegex(profiles.ProfileError, "unavailable"):
+                runtime.start("local", wait=30, shutdown_timeout=2)
+
+    def test_an_engine_that_is_up_gets_its_own_first_token_budget(self):                        # #5177 #5059 #4293
+        host = runtime.Host("local", shutdown_timeout=2, startup_wait=5)
+        ready = self.root / "ready.json"
+        child = mock.Mock(pid=4321)
+        child.poll.return_value = None
+        ready.write_text(json.dumps({"pid": 4321, "instance_id": "i" * 32}), encoding="utf-8")
+        host.child, host.ready_path = child, ready
+        host.args, host.source_bytes, host.expected_attestation = ["--host", "127.0.0.1"], b"{}", "0" * 64
+        host.probe_deadline = time.monotonic() - 100          # the load used up the whole wait
+        seen = []
+        started = threading.Event()
+
+        def probe(self_, ready_, key, host_, source, attestation, timeout):
+            seen.append(timeout)
+            started.set()
+        with mock.patch.object(runtime.Host, "_verify_ready", probe):
+            self.assertEqual(host._status()["phase"], "verifying_generation")
+            self.assertTrue(started.wait(5))
+        self.assertGreaterEqual(seen[0], runtime.VERIFY_BUDGET)
+
+    def test_the_start_wait_does_not_end_while_the_first_token_is_being_checked(self):          # #5177 #4293
+        answers = [{"ok": True, "state": "starting", "phase": "verifying_generation"}] * 3 +                   [{"ok": True, "state": "ready", "phase": None, "instance_id": "i" * 32}]
+        clock = [0.0]
+
+        def rpc(name, command, **kw):
+            clock[0] += 100.0                                 # every look is 100 s later: the 150 s wait is over after the second
+            return answers.pop(0)
+        with mock.patch.object(runtime, "_rpc", rpc), mock.patch.object(runtime.time, "sleep", lambda s: None),                 mock.patch.object(runtime.time, "monotonic", lambda: clock[0]):
+            result = runtime._await_start("local", 150)
+        self.assertTrue(result["ok"], result)                 # the verifying phase carried it past the wait, up to VERIFY_BUDGET
+        answers[:] = [{"ok": True, "state": "starting", "phase": "loading"}] * 9
+        clock[0] = 0.0
+        with mock.patch.object(runtime, "_rpc", rpc), mock.patch.object(runtime.time, "sleep", lambda s: None),                 mock.patch.object(runtime.time, "monotonic", lambda: clock[0]):
+            result = runtime._await_start("local", 150)
+        self.assertEqual((result["error"], result["phase"]), ("startup_wait_expired", "loading"))     # a load that does not finish still ends
+
+    def test_the_host_leaves_when_its_server_ends_on_its_own(self):                              # #4574 #4893 (#4893 is the PR: same idea, own code)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
+        self.assertTrue(started["ok"])
+        owned = runtime._STARTED_HOSTS.pop("local")
+        os.kill(started["child_pid"], signal.SIGTERM)         # the server dies; the host did not ask it to
+        failed = None
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            failed = runtime.status("local")
+            if failed.get("state") == "failed":
+                break
+            time.sleep(0.1)
+        self.assertEqual(failed["state"], "failed", "the server's end is published before the host leaves")
+        self.assertEqual(failed["error"], "server_exited")
+        try:
+            code = owned.wait(timeout=runtime.CHILD_EXIT_GRACE + 15)
+        except subprocess.TimeoutExpired:
+            self.fail("the owner host stays alive as a husk after its server exited")
+        self.assertEqual(code, 6)
+        self.assertIsNone(runtime._read_state("local"), "the host left its private state behind")
+        log = (self.root / "runtime" / "local.host.log").read_text(encoding="utf-8", errors="replace")
+        self.assertIn("the server ended on its own", log)
+        replacement = runtime.start("local", wait=60, shutdown_timeout=2)                    # no manual kill
+        self.assertTrue(replacement["ok"])
+
+    def test_die_with_does_not_stop_an_engine_for_a_look_that_failed(self):                     # #4973
+        host = runtime.Host("local", shutdown_timeout=2, die_with=(os.getpid(), "tok"))
+        with mock.patch.object(runtime.procs, "start_token", return_value=None), mock.patch.object(runtime, "_pid_exists", return_value=True):
+            for _ in range(10):
+                self.assertFalse(host._die_with_gone(), "a process that is there but cannot be read ended the engine")
+        with mock.patch.object(runtime.procs, "start_token", return_value="tok"):
+            self.assertFalse(host._die_with_gone())
+        with mock.patch.object(runtime.procs, "start_token", return_value="other"):
+            self.assertTrue(host._die_with_gone(), "a later process with that number is the end of the one followed")
+        host.die_misses = 0
+        with mock.patch.object(runtime.procs, "start_token", return_value=None), mock.patch.object(runtime, "_pid_exists", return_value=False):
+            self.assertEqual([host._die_with_gone() for _ in range(runtime.DIE_WITH_MISSES)], [False] * (runtime.DIE_WITH_MISSES - 1) + [True])
+
+    def test_a_host_lost_before_it_launched_anything_is_recovered(self):                        # #4250: the PR's idea
+        owner = self._slow_plan_owner(120)
+        state = runtime._read_state("local")
+        marker = runtime._child_marker("local", state["token"])
+        self.assertEqual(json.loads(marker.read_text(encoding="utf-8")), {"host_token": state["token"], "phase": "no_child"})
+        owner.kill()
+        owner.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while runtime._host_lease_active("local") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(runtime._recover_stale("local", wait=0))
+        self.assertIsNone(runtime._read_state("local"))
+        self.assertFalse(marker.exists())
+        self.assertTrue(runtime.start("local", wait=60, shutdown_timeout=2)["ok"])
+
+    def test_a_missing_or_foreign_marker_still_refuses_recovery(self):                           # #4250
+        state_path, socket_path, _ = runtime._paths("local")
+        token = "a" * 64
+        state = {"schema_version": 1, "profile": "local", "socket": "tcp:127.0.0.1:50000" if WINDOWS else str(socket_path),
+                 "token": token, "host_pid": 999999}
+        lease = runtime._write_new(state_path, (json.dumps(state) + "\n").encode())
+        runtime._unlock_file(lease)
+        os.close(lease)
+        with self.assertRaisesRegex(profiles.ProfileError, "no valid child ownership record"):
+            runtime._recover_stale("local", wait=0)
+        marker = runtime._child_marker("local", token)
+        marker.write_text(json.dumps({"host_token": token, "phase": "no_child", "pid": os.getpid()}), encoding="utf-8")   # more than the exact record
+        marker.chmod(0o600)
+        with self.assertRaisesRegex(profiles.ProfileError, "unverified"):
+            runtime._recover_stale("local", wait=0)
         self.assertTrue(state_path.exists())
 
     # ---- owner transport, attach and identity (POSIX socket and Windows loopback alike)
@@ -1072,7 +1276,7 @@ class RuntimeTests(unittest.TestCase):
             client.close()
 
     def test_a_second_client_attaches_from_another_process_and_shares_the_owner(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         state = runtime._read_state("local")
         if WINDOWS:
@@ -1090,7 +1294,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.status("local")["state"], "stopped")
 
     def test_a_wrong_or_stale_token_cannot_stop_the_owner(self):
-        started = runtime.start("local", wait=10, shutdown_timeout=2)
+        started = runtime.start("local", wait=60, shutdown_timeout=2)
         self.assertTrue(started["ok"])
         state = runtime._read_state("local")
         wrong_last = "0" if state["token"][-1] != "0" else "1"
@@ -1123,12 +1327,74 @@ class RuntimeTests(unittest.TestCase):
             self.assertTrue(runtime._pid_exists(victim.pid, real))
             self.assertFalse(runtime._pid_exists(victim.pid, real + 12345))
             self._stale_host(victim.pid, started=real + 12345)           # the number was reused by another process
-            started = runtime.start("local", wait=10, shutdown_timeout=2)
+            started = runtime.start("local", wait=60, shutdown_timeout=2)
             self.assertTrue(started["ok"])                               # recovered: it was not the recorded child
             self.assertIsNone(victim.poll(), "the process that reused the PID was stopped")
         finally:
             victim.kill()
             victim.wait(timeout=10)
+
+    def test_marker_without_creation_time_ignores_a_reused_pid_of_a_foreign_program(self):
+        # #3488: the marker had no `started`, the number was reused by another program, every load said "still present".
+        child = {"pid": 38552}
+        with mock.patch.object(runtime, "WINDOWS", True), \
+                mock.patch.object(runtime, "_pid_exists", return_value=True), \
+                mock.patch.object(runtime.winproc, "process_image", create=True) as image:
+            image.return_value = r"C:\Windows\System32\svchost.exe"
+            self.assertFalse(runtime._child_present(child))
+            image.return_value = r"C:\Users\a\AppData\Local\Strata\python\python.exe"
+            self.assertTrue(runtime._child_present(child))
+            image.return_value = None                                    # unreadable: keep refusing, never guess
+            self.assertTrue(runtime._child_present(child))
+            image.return_value = r"C:\Windows\System32\svchost.exe"
+            self.assertTrue(runtime._child_present({"pid": 1, "started": 5}))   # a creation time decides by itself
+
+    def test_a_process_created_after_the_marker_was_written_is_not_the_recorded_child(self):
+        # 2026-10-22: the app was force-killed, its marker had no creation time, the number now belonged to another Python program, and every
+        # load said "lost host child is still present" until the marker was deleted by hand. The child was started BEFORE its marker was written.
+        child = {"pid": 4242}
+        with mock.patch.object(runtime, "_pid_exists", return_value=True), \
+                mock.patch.object(runtime.winproc, "process_image", create=True, return_value="C:\\Python\\python.exe"), \
+                mock.patch.object(runtime.procs, "started_epoch") as created:
+            created.return_value = 1000.0 + 60
+            self.assertFalse(runtime._child_present(child, written=1000.0), "created a minute after the marker: another process")
+            created.return_value = 1000.0 - 5
+            self.assertTrue(runtime._child_present(child, written=1000.0), "created before the marker: could be the child, keep refusing")
+            created.return_value = 1000.0 + 1.5
+            self.assertTrue(runtime._child_present(child, written=1000.0), "inside the clock slack: keep refusing")
+            created.return_value = None
+            self.assertTrue(runtime._child_present(child, written=1000.0), "creation time unreadable: never guess")
+            created.return_value = 1000.0 + 60
+            self.assertTrue(runtime._child_present({"pid": 4242, "started": 7}, written=1000.0) is True, "a recorded creation time decides by itself")
+            self.assertTrue(runtime._child_present(child), "no marker time: unchanged")
+
+    def test_a_marker_left_by_a_killed_app_is_cleaned_up_when_its_number_belongs_to_a_later_program(self):
+        victim = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        try:
+            state_path, marker = self._stale_host(victim.pid)             # a marker with no creation time (Windows could not read it)
+            old = time.time() - 3600
+            os.utime(marker, (old, old))                                  # written an hour ago: the victim started after it
+            started = runtime.start("local", wait=60, shutdown_timeout=2)
+            self.assertTrue(started["ok"], started)
+            self.assertFalse(marker.exists(), "the stale marker was removed")
+            self.assertIsNone(victim.poll(), "the program that reused the number was left alone")
+        finally:
+            victim.kill()
+            victim.wait(timeout=10)
+
+    def test_started_epoch_reads_a_live_process_and_nothing_for_a_dead_number(self):
+        victim = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        try:
+            now = time.time()
+            created = procs.started_epoch(victim.pid)
+            self.assertIsNotNone(created)
+            self.assertLess(abs(created - now), 60)
+        finally:
+            victim.kill()
+            victim.wait(timeout=10)
+        self.assertIsNone(procs.started_epoch(victim.pid))
+        self.assertIsNone(procs.started_epoch(0))
+        self.assertIsNone(procs.started_epoch(-5))
 
     @unittest.skipUnless(WINDOWS, "os.kill(pid, 0) ends a process on Windows; liveness is a handle query")
     def test_liveness_check_does_not_end_the_process_it_asks_about(self):
@@ -1153,8 +1419,65 @@ class RuntimeTests(unittest.TestCase):
         if done.returncode != 0:
             self.skipTest("icacls could not widen the test directory")
         with mock.patch.dict(os.environ, {"STRATA_RUNTIME_DIR": str(shared)}):
-            with self.assertRaisesRegex(profiles.ProfileError, "owner-only"):
+            # a folder that names Everyone is the user's own state folder: it is locked down once and used (never a stop)
+            self.assertEqual(runtime.runtime_dir(), shared)
+            self.assertTrue(private_files.is_unshared(shared))
+        again = Path(self.temp.name) / "shared-runtime-2"
+        again.mkdir()
+        subprocess.run(["icacls", str(again), "/grant", "*S-1-1-0:(OI)(CI)R"], capture_output=True)
+        with mock.patch.dict(os.environ, {"STRATA_RUNTIME_DIR": str(again)}), \
+                mock.patch.object(private_files, "restrict_to_current_user"), \
+                mock.patch.object(private_files, "repair_access", return_value=False):
+            # when the lock-down does not happen it still refuses, in plain words and naming who can open it
+            with self.assertRaisesRegex(profiles.ProfileError, "Everyone"):
                 runtime.runtime_dir()
+
+    def test_ready_pid_may_be_a_child_of_the_launcher_on_windows_only(self):
+        # #3683: a Windows venv's python.exe starts the real interpreter as its child, so the server that writes the ready file
+        # is one process below the pid the host started. It must still match; a stranger or a distant process must not.
+        parents = {200: 100, 300: 200, 400: 300, 500: 400}
+        with mock.patch.object(runtime.procs, "parent_of", side_effect=lambda pid: parents.get(pid)):
+            with mock.patch.object(runtime, "WINDOWS", True):
+                self.assertTrue(runtime._ready_pid_is_child(100, 100))
+                self.assertTrue(runtime._ready_pid_is_child(200, 100))
+                self.assertTrue(runtime._ready_pid_is_child(300, 100))
+                self.assertTrue(runtime._ready_pid_is_child(400, 100))
+                self.assertFalse(runtime._ready_pid_is_child(500, 100))      # too far below
+                self.assertFalse(runtime._ready_pid_is_child(999, 100))      # unrelated
+                self.assertFalse(runtime._ready_pid_is_child(None, 100))
+                self.assertFalse(runtime._ready_pid_is_child("200", 100))
+                self.assertFalse(runtime._ready_pid_is_child(0, 100))
+            with mock.patch.object(runtime, "WINDOWS", False):
+                self.assertTrue(runtime._ready_pid_is_child(100, 100))
+                self.assertFalse(runtime._ready_pid_is_child(200, 100))      # POSIX has no launcher in between
+
+    @unittest.skipUnless(WINDOWS, "the venv launcher is a Windows thing")
+    def test_server_started_through_a_launcher_process_becomes_ready(self):
+        launcher = self.root / "launcher.cmd"
+        launcher.write_bytes(f'@echo off\r\n"{sys.executable}" %*\r\n'.encode())
+        host = runtime.Host("local", shutdown_timeout=2, startup_wait=20)
+        plan, args, source, original = host._plan()
+        with mock.patch.object(sys, "executable", str(launcher)):
+            host._launch(args, source, original, plan["profile_revision"])
+        try:
+            result = host._wait_ready(30)
+            self.assertTrue(result["ok"], result)
+            self.assertTrue(result["generation_ready"])
+            ready = json.loads(host.ready_path.read_text(encoding="utf-8"))
+            self.assertNotEqual(ready["pid"], host.child.pid)               # the server is below the launcher
+        finally:
+            host._stop_child()
+
+    def test_a_ready_file_that_is_not_ours_is_named_in_the_status_phase(self):
+        host = runtime.Host("local", shutdown_timeout=2, startup_wait=10)
+        host.child = mock.Mock(pid=111)
+        host.child.poll.return_value = None
+        host.ready_path = self.root / "ready.json"
+        host.ready_path.write_text(json.dumps({"pid": 222, "instance_id": "a" * 32}), encoding="utf-8")
+        with mock.patch.object(runtime.procs, "parent_of", return_value=None):
+            self.assertEqual(host._status()["phase"], "ready_file_not_matched")
+        host.ready_path.unlink()
+        self.assertEqual(host._status()["phase"], "loading")
 
     def test_exclusive_lease_waits_for_shared_holders_and_shared_holders_coexist(self):
         first = runtime.acquire_activity_lease(shared=True)
@@ -1173,6 +1496,80 @@ class RuntimeTests(unittest.TestCase):
         finally:
             runtime._unlock_file(exclusive)
             os.close(exclusive)
+
+
+class StartWaitLimit(unittest.TestCase):
+    def setUp(self):
+        # A start writes an operation record before the engine runs, so these tests keep their records (and any profile
+        # lookup) in a scratch folder rather than in the person's own state.
+        temp = tempfile.TemporaryDirectory(prefix="strata-start-wait-test-")
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        (root / "profiles").mkdir()
+        env = mock.patch.dict(os.environ, {"STRATA_PROFILE_DIR": str(root / "profiles"),
+                                           "STRATA_RUNTIME_DIR": str(root / "runtime")})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_a_start_may_wait_up_to_thirty_minutes_for_a_big_model(self):                    # #3949
+        from strata_control import runtime as rt, profiles as pr
+        self.assertEqual(rt.MAX_START_WAIT, 1800)
+        with self.assertRaisesRegex(pr.ProfileError, "start wait must be 0..1800"):
+            rt.start("x", wait=1801)
+        with mock.patch.object(rt, "_name", side_effect=pr.ProfileError("reached")):
+            with self.assertRaisesRegex(pr.ProfileError, "reached"):
+                rt.start("x", wait=1800)
+
+    def test_a_long_start_wait_reaches_the_runtime_through_the_cli(self):                     # #3459 #4191
+        # The desktop app starts models through `strata runtime start --wait`, and that wait is checked three times before
+        # the engine is reached: by management, by the operation record, and by the runtime itself. When only the runtime's
+        # ceiling was raised (#3949), a long start died at each of the first two with
+        # "start wait must be finite seconds in 0..600" / "direct runtime intent has an invalid timeout". So this walks the
+        # whole way with only the engine itself faked: any layer that still carries the old 600 s shows up here.
+        from strata_control import journal as jn, management as mg, profiles as pr, runtime as rt
+        revision = "0123456789abcdef"
+        for wait in (300, 600, 601, rt.MAX_START_WAIT):
+            reached = {}
+            with mock.patch.object(rt, "_name", lambda name: name), \
+                    mock.patch.object(mg.profiles, "load", lambda name: ("src", revision)), \
+                    mock.patch.object(rt, "start", lambda name, **kw: (reached.update(kw),
+                            {"ok": True, "state": "ready", "profile": name})[1]):
+                result = mg.runtime_action("start", "demo", wait=wait, shutdown_timeout=15)
+                self.assertEqual(result["state"], "ready")
+                self.assertEqual(reached["wait"], float(wait),
+                                 f"a start asked for {wait} s did not reach runtime.start with it")
+
+    def test_a_start_wait_above_the_runtime_ceiling_is_named_by_the_runtime(self):             # #3459 #4191
+        from strata_control import management as mg, profiles as pr, runtime as rt
+        revision = "0123456789abcdef"
+        with mock.patch.object(rt, "_name", lambda name: name), \
+                mock.patch.object(mg.profiles, "load", lambda name: ("src", revision)):
+            with self.assertRaisesRegex(pr.ProfileError, f"start wait must be finite seconds in 0..{rt.MAX_START_WAIT}"):
+                mg.runtime_action("start", "demo", wait=rt.MAX_START_WAIT + 1, shutdown_timeout=15)
+            with self.assertRaisesRegex(pr.ProfileError, f"startup wait must be finite seconds in 1..{rt.MAX_START_WAIT}"):
+                mg.runtime_action("restart", "demo", startup_wait=rt.MAX_START_WAIT + 1,
+                                  if_owner_id="0" * 32, if_instance_id="0" * 32)
+
+    def test_the_operation_record_takes_the_runtimes_own_start_ceiling(self):
+        # The record is written before the start runs, so a ceiling kept here would stop a long wait no matter what the
+        # two validators above allow. Waits that are not a start or a restart keep their own 600 s.
+        from strata_control import journal as jn, profiles as pr, runtime as rt
+        for kind, intent, allowed in (
+                ("runtime.start", {"wait_s": rt.MAX_START_WAIT, "shutdown_timeout_s": 15}, True),
+                ("runtime.start", {"wait_s": rt.MAX_START_WAIT + 1, "shutdown_timeout_s": 15}, False),
+                ("runtime.restart", {"wait_s": 1000, "startup_wait_s": rt.MAX_START_WAIT,
+                                     "expected_profile_revision": "0" * 16,
+                                     "expected_owner_id": "0" * 32, "expected_instance_id": "0" * 32,
+                                     "allow_source_switch": False, "allow_source_migration": False,
+                                     "expected_source_sha256": "0" * 64}, True),
+                ("runtime.stop", {"wait_s": rt.MAX_START_WAIT}, False),
+                ("runtime.verify", {"wait_s": rt.MAX_START_WAIT, "load": False}, False)):
+            with self.subTest(kind=kind, wait=intent["wait_s"]):
+                if allowed:
+                    jn._validate_direct_intent(kind, dict(intent))
+                else:
+                    with self.assertRaisesRegex(pr.ProfileError, "invalid timeout"):
+                        jn._validate_direct_intent(kind, dict(intent))
 
 
 if __name__ == "__main__":

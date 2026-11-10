@@ -1,6 +1,16 @@
 # Thiswaylabs Strata handoff
 
-Updated 2026-10-19. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+Updated 2026-11-10. Continue in `C:\AI\Strata-dev`; do not infer runtime state from these notes without checking Git and `/health`.
+
+## Upstream candidate prepared, 2026-11-10
+
+[Draft PR #11](https://github.com/ThisWayLabsAI/Strata/pull/11) integrates pinned upstream `dbb2d168` on
+`update/upstream-0.2.13.1-20261110`. Its isolated checkout is `C:\AI\Strata-integration-20261110`.
+The clean `main` mirrors are synced. Stable/live remain `c4152d27` and live engine 0.1.45.3; the native candidate
+was stopped after testing and the prior IQ3_XXS selection/unloaded state was restored. Config hashes are unchanged.
+See [the integration record](UPSTREAM_INTEGRATION_2026-11-10.md) for merge decisions, actual validation and remaining
+gates. GitHub currently refuses workflow dispatches because Actions is disabled for the repository. Keep this PR in
+draft and preserve the current live release until the required checks are resolved. Earlier entries describe their state at the time.
 
 ## Vision inputs and Private Monitor exclusion deployed, 2026-10-19
 

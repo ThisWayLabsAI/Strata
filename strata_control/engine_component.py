@@ -41,6 +41,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 import re
 import shutil
 import subprocess
@@ -48,7 +49,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from strata_control import acquisition
+from strata_control import acquisition, longpath
 from strata_control.targets import BACKEND_MATRIX, backend_supported, host_platform
 
 SCHEMA_VERSION = 2
@@ -131,6 +132,7 @@ class EngineComponent:
     variant: str = ""                                     # optional tag when one backend has several builds (cuda13, cuda12)
     signature: dict | None = None                         # S6: {"alg", "key_id", "value"} over signing_payload()
     raw: dict = field(default_factory=dict, repr=False)   # the manifest as read, for the signature check
+    shape: str = ""                                       # the engine of one model shape (strata_control/shape_engine.py): its compiled geometry's name; "" for the Strata engine
 
     @property
     def exe(self) -> Path:
@@ -148,7 +150,8 @@ class EngineComponent:
         return {"id": self.id, "version": self.version, "platform": self.platform, "backend": self.backend,
                 "entrypoint": self.entrypoint, "exe": str(self.exe), "root": str(self.root),
                 "min_runtime": self.min_runtime, "archs": list(self.archs), "min_driver": dict(self.min_driver),
-                "build_id": self.build_id, "variant": self.variant, "signed": bool(self.signature), "file_count": len(self.files), "bytes": sum(item[2] for item in self.files)}
+                "build_id": self.build_id, "variant": self.variant, "signed": bool(self.signature), "file_count": len(self.files), "bytes": sum(item[2] for item in self.files),
+                **({"shape": self.shape} if self.shape else {})}
 
 
 def package_lib_dirs(folder) -> list[str]:
@@ -189,15 +192,65 @@ def engine_dir(root: Path | None = None) -> Path:
     return (root or components_dir()) / "engine"
 
 
+def newest_installed_version(root: Path | None = None) -> str | None:
+    """The highest engine version in the component folder, or None. A quick scan; nothing is hashed."""
+    try:
+        found, _ = scan(root)
+    except Exception:                                   # noqa: BLE001 - informational only
+        return None
+    return max((item.version for item in found), key=_version_key, default=None)
+
+
 def cached_notice(root: Path | None = None) -> str | None:
     """"update available (x.y.z): run `strata update`" from the last explicit check, or None. Reads one small local file; it never
-    touches the network, so showing it at a start does not break the rule that only an update step downloads."""
-    try:
-        last = (json.loads(((root or components_dir()) / UPDATE_STATE).read_text(encoding="utf-8-sig")).get("last_check") or {})
-    except (OSError, ValueError, AttributeError):
-        return None
-    parts = [f"engine {last['engine']}" for _ in [0] if last.get("engine")] + [f"app {last['app']}" for _ in [0] if last.get("app")]
+    touches the network, so showing it at a start does not break the rule that only an update step downloads.
+
+    The notice belongs to the versions the check was made for: it is dropped when Control or the installed engine is not the one
+    recorded then (an app install, an update, a rollback), and an engine that is not newer than the installed one is never offered."""
+    offers = cached_offers(root)
+    parts = ([f"engine {offers['engine']}"] if offers.get("engine") else []) + ([f"DeepSeek engine {offers['dsv41']}"] if offers.get("dsv41") else []) \
+        + ([f"app {offers['app']}"] if offers.get("app") else [])
     return f"update available ({', '.join(parts)}): run `strata update`" if parts else None
+
+
+def _installed_dsv41_version(profile_configs=None) -> str | None:
+    """The newest DeepSeek engine package the saved profiles name (a local read), or None."""
+    from strata_control import dsv41_paths
+    newest = None
+    for r in dsv41_paths.roots_of(profile_configs if profile_configs is not None else dsv41_paths.saved_configs()):
+        for exe in dsv41_paths.installed(r):
+            v = exe.parent.name.split("-")[0]
+            if newest is None or _version_key(v) > _version_key(newest):
+                newest = v
+    return newest
+
+
+def cached_offers(root: Path | None = None) -> dict:
+    """What the last explicit check found newer, as {"engine": version|None, "dsv41": version|None, "app": version|None}; local reads only (the cached
+    check, the installed packages), never the network.  The same rules as `cached_notice`: it belongs to the Control and the packages it was made for,
+    and a package that is not newer than the installed one is never offered."""
+    base = root or components_dir()
+    none = {"engine": None, "dsv41": None, "app": None}
+    try:
+        last = (json.loads((base / UPDATE_STATE).read_text(encoding="utf-8-sig")).get("last_check") or {})
+    except (OSError, ValueError, AttributeError):
+        return none
+    if not isinstance(last, dict):
+        return none
+    control = runtime_version()
+    if "control" in last and last["control"] != control:
+        return none
+    engine, app, dsv41 = last.get("engine"), last.get("app"), last.get("dsv41")
+    installed = newest_installed_version(base)
+    if "engine_installed" in last and last["engine_installed"] != installed:
+        engine = None
+    if engine and installed and _version_key(str(engine)) <= _version_key(installed):
+        engine = None
+    if dsv41:
+        have = _installed_dsv41_version()
+        if have is None or "dsv41_installed" in last and last["dsv41_installed"] != have or _version_key(str(dsv41)) <= _version_key(have):
+            dsv41 = None
+    return {"engine": engine or None, "dsv41": dsv41 or None, "app": app or None}
 
 
 def previous_folder(root: Path | None = None) -> str | None:
@@ -239,7 +292,10 @@ def _plain_relative(path: str) -> str:
     return path.replace("\\", "/")
 
 
-def read_manifest(folder: Path) -> EngineComponent:
+def read_manifest(folder: Path, component_id: str = COMPONENT_ID) -> EngineComponent:
+    """The manifest of the package in `folder`. `component_id` is the component the caller expects: the Strata engine (``strata-engine``) or the engine of
+    one model shape (``strata-q4-lite``, strata_control/shape_engine.py). A package of one kind is never read as the other: the id and the ``shape`` member
+    must agree with it, so an older Control (which only knows ``strata-engine``) refuses a shape engine that was put into its engine folder by hand."""
     path = folder / MANIFEST
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -250,8 +306,17 @@ def read_manifest(folder: Path) -> EngineComponent:
     if not isinstance(data, dict) or data.get("schema_version") not in READABLE_SCHEMAS:
         raise ComponentProblem(f"{MANIFEST} has an unsupported schema_version")
     schema = data["schema_version"]
-    if data.get("id") != COMPONENT_ID or data.get("name", COMPONENT_ID) != COMPONENT_ID:
+    if data.get("id") != component_id or data.get("name", component_id) != component_id:
         raise ComponentProblem(f"{MANIFEST} is not an engine component (id {data.get('id')!r})")
+    shape = ""
+    if component_id == COMPONENT_ID:
+        if data.get("shape"):
+            raise ComponentProblem(f"{MANIFEST} is the engine of a model shape, not the Strata engine")
+    else:
+        from strata_control import shape_engine
+        shape = str(data.get("shape") or "")
+        if not shape or shape_engine.component_id(shape) != component_id:
+            raise ComponentProblem(f"{MANIFEST} names the shape {shape!r}, which is not the one of {component_id}")
     for key in ("version", "platform", "backend", "entrypoint"):
         if not isinstance(data.get(key), str) or not data[key]:
             raise ComponentProblem(f"{MANIFEST} has no {key}")
@@ -296,7 +361,21 @@ def read_manifest(folder: Path) -> EngineComponent:
         entrypoint=entry, files=tuple(parsed), root=folder, min_runtime=data.get("min_runtime"),
         archs=tuple(archs), notes=str(data.get("notes") or ""), min_driver=dict(driver),
         build_id=str(data.get("build_id") or ""), variant=str(data.get("variant") or ""), signature=signature,
-        raw=data)
+        raw=data, shape=shape)
+
+
+def read_manifest_any(folder: Path) -> EngineComponent:
+    """The manifest of a package of either kind: the Strata engine, or the engine of a model shape (its id names the shape's component). For the release tools, which
+    handle both; the start path asks for the one it wants (read_manifest with the component's id)."""
+    try:
+        raw_id = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig")).get("id")
+    except (OSError, ValueError, AttributeError):
+        raw_id = None
+    if isinstance(raw_id, str) and raw_id != COMPONENT_ID:
+        from strata_control import shape_engine
+        if shape_engine.shape_of_component(raw_id):
+            return read_manifest(folder, raw_id)
+    return read_manifest(folder)
 
 
 # ----------------------------------------------------------------------------------------------- signature (S6)
@@ -358,26 +437,46 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _hash_settled(path: Path, digest: str) -> str | None:
+    """The file's SHA-256, read again once when the first read fails or differs: a file that was just unpacked or is
+    being scanned by a virus checker can read short or locked for a moment, and a failure must not be kept (#3488)."""
+    actual = None
+    for attempt in range(2):
+        try:
+            actual = _sha256(path)
+        except OSError:
+            actual = None
+        if actual == digest:
+            break
+        if attempt == 0:
+            time.sleep(0.5)
+    return actual
+
+
 def verify(component: EngineComponent, *, full: bool = False) -> None:
     """Raise IntegrityProblem unless the files are what the manifest says. `full` hashes every file; without it only
     the entrypoint is hashed (sizes are always checked)."""
-    root = component.root.resolve()
+    # extended-length paths: under a long user name an AMD engine's files pass 259 characters, which Windows (long paths off)
+    # reports as "missing" for an ordinary path
+    folder = longpath.long_path(component.root)
+    root = folder.resolve()
     for rel, digest, size in component.files:
-        target = component.root / rel
+        target = folder / rel
         try:
             info = target.lstat()
         except OSError:
             raise IntegrityProblem(f"{rel} is missing") from None
         if target.is_symlink() or not target.is_file():
             raise IntegrityProblem(f"{rel} is not a regular file")
-        try:
-            target.resolve().relative_to(root)
-        except ValueError:
-            raise IntegrityProblem(f"{rel} resolves outside the component folder") from None
+        if not longpath.same_tree(target.resolve(), root):
+            raise IntegrityProblem(f"{rel} resolves outside the component folder")
         if info.st_size != size:
             raise IntegrityProblem(f"{rel} is {info.st_size} bytes, the manifest says {size}")
-        if (full or rel == component.entrypoint) and _sha256(target) != digest:
-            raise IntegrityProblem(f"{rel} does not match its recorded SHA-256")
+        if full or rel == component.entrypoint:
+            actual = _hash_settled(target, digest)
+            if actual != digest:
+                raise IntegrityProblem(f"{rel} does not match its recorded SHA-256 (expected {digest[:12]}, "
+                                       f"found {actual[:12] if actual else 'unreadable'})")
     if os.name != "nt" and not os.access(component.exe, os.X_OK):
         raise IntegrityProblem(f"{component.entrypoint} is not executable")
 
@@ -391,30 +490,93 @@ def runtime_version() -> str | None:
 
 # ----------------------------------------------------------------------------------------------- the GPU
 
+def split_backend(value) -> tuple[str, str]:
+    """(backend, variant) for a name the person typed: "hip-rdna2" is the hip family and its rdna2 package (the way the feed labels an AMD
+    package, #4013), "hip" is the family alone, any other name is returned as it is with no variant."""
+    name = str(value or "").strip().lower()
+    if name not in BACKEND_MATRIX and name.startswith("hip-") and len(name) > 4:
+        return "hip", name[4:]
+    return name, ""
+
+
+BACKEND_ALIASES = {"nvidia": "cuda", "amd": "hip", "intel": "sycl", "arc": "sycl"}
+SAVED_KEY = "engine_backend"
+
+
+def clean_backend_name(value) -> str:
+    """What the person typed for --backend, as an engine family name: 'intel' -> 'sycl', 'NVIDIA' -> 'cuda'; '' when it names none."""
+    name = str(value or "").strip().lower()
+    name = BACKEND_ALIASES.get(name, name)
+    return name if name in ("cuda", "hip", "sycl") else ""
+
+
+def saved_backend(environ=None) -> str | None:
+    """The engine family the person chose with `strata launch --backend` (kept in the settings file), or None. It is ignored when this PC
+    has no card of that make (the choice was made on other hardware): the PC's own detection then decides again."""
+    try:
+        from strata_control import discovery
+        value = clean_backend_name(discovery._read_json(discovery.own_settings_file(environ)).get(SAVED_KEY))        # noqa: SLF001
+    except Exception:                                    # noqa: BLE001 - a settings file that cannot be read is no choice
+        return None
+    if not value:
+        return None
+    here = gpu_makes_present()
+    return value if (not here or value in here) else None
+
+
+def save_backend(value, environ=None) -> Path | None:
+    """Keep (or, with a falsy value, forget) the person's engine family choice in the settings file, leaving every other key as it is."""
+    from strata_control import discovery
+    path = discovery.own_settings_file(environ)
+    data = discovery._read_json(path)                    # noqa: SLF001
+    name = clean_backend_name(value)
+    if name:
+        data[SAVED_KEY] = name
+    else:
+        data.pop(SAVED_KEY, None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    return path
+
+
 def detect_backend(environ=None) -> tuple[str | None, str]:
     """(backend, how) for this machine: the engine family its GPU needs. Bounded, read-only probes of tools that are
     already installed; ``STRATA_ENGINE_BACKEND`` overrides (the tests and the support desk use it)."""
     environ = os.environ if environ is None else environ
-    forced = environ.get(ENV_BACKEND, "").strip().lower()
+    forced = split_backend(environ.get(ENV_BACKEND, ""))[0]      # "hip-rdna2" starts the hip family (the package choice reads the variant)
     if forced:
         if forced not in BACKEND_MATRIX:
             raise ComponentProblem(f"{ENV_BACKEND}={forced!r} is not one of {', '.join(sorted(BACKEND_MATRIX))}")
         return forced, "environment"
+    chosen = saved_backend(environ)
+    if chosen:
+        return chosen, "saved choice"
     if host_platform().startswith("macos"):
         return "metal", "platform"
+    # Windows: the display adapters are the machine's own statement about which cards it has, so they decide first. A leftover
+    # nvidia-smi from a card that was taken out, or a toolkit installed for another card, must never outvote them: that is how an
+    # AMD PC was given a CUDA engine (#3688). A tool is only asked about a make that has an adapter here.
+    adapters = windows_display_adapters() if host_platform().startswith("windows") else []
+    present = adapter_makes(adapters)
+    if present:
+        return _first_make(present), "display adapters"
     probes = (("cuda", ("nvidia-smi", "--query-gpu=name", "--format=csv,noheader")),
               ("hip", ("rocminfo",) if os.name != "nt" else ("hipInfo",)),
               ("sycl", ("sycl-ls",)))
+    vendors_here = {a.get("vendor") for a in adapters}
+    vendor_of = {"cuda": "10de", "hip": "1002", "sycl": "8086"}
     for backend, command in probes:
+        if vendors_here and vendor_of[backend] not in vendors_here:
+            continue                                  # the adapters list no card of this make: a tool that answers is a leftover
         tool = shutil.which(command[0])
         if not tool:
             continue
         try:
-            done = subprocess.run([tool, *command[1:]], capture_output=True, timeout=8, text=True,
+            done = subprocess.run([tool, *command[1:]], capture_output=True, timeout=8, text=True, errors="replace",
                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except (OSError, subprocess.SubprocessError):
             continue
-        if done.returncode == 0 and done.stdout.strip():
+        if done.returncode == 0 and (done.stdout or "").strip():
             if backend == "hip" and "gfx" not in done.stdout:
                 continue
             if backend == "sycl" and "level_zero" not in done.stdout.lower() and "gpu" not in done.stdout.lower():
@@ -426,27 +588,106 @@ def detect_backend(environ=None) -> tuple[str | None, str]:
     return None, "no GPU tool answered"
 
 
-def _drm_vendor_backend() -> str | None:
-    """Linux without the vendor tools on PATH (a HIP box that runs ROCm from Python wheels has no rocminfo): the PCI
-    vendor of the display adapters decides. NVIDIA 0x10de -> cuda, AMD 0x1002 -> hip, Intel 0x8086 -> sycl, in that
-    order. Read-only sysfs, nothing is run."""
-    if not os.path.isdir("/sys/class/drm"):
-        return None
+def _first_make(makes) -> str:
+    """The make Strata uses when a PC has cards of several: NVIDIA, then AMD, then Intel (the order of every probe)."""
+    return next(m for m in ("cuda", "hip", "sycl") if m in makes)
+
+
+def adapter_makes(adapters: list[dict] | None) -> set[str]:
+    """The engine families the Windows display adapters call for: cuda (an NVIDIA adapter), hip (an AMD card, not an integrated
+    Radeon), sycl (an Intel adapter). Empty when the list is empty. Read-only, nothing is run."""
+    makes = set()
+    for adapter in adapters or []:
+        vendor = adapter.get("vendor")
+        if vendor == "10de":
+            makes.add("cuda")
+        elif vendor == "8086":
+            makes.add("sycl")
+    if windows_amd_cards(adapters or []):
+        makes.add("hip")
+    return makes
+
+
+def gpu_makes_present() -> set[str]:
+    """The engine families this PC has a graphics card for, from the display adapters (Windows) or the PCI vendors (Linux); empty
+    when that cannot be read. Used to keep an update on the make the installation was built for (#3688)."""
+    if os.name == "nt":
+        return adapter_makes(windows_display_adapters())
+    return _drm_vendor_makes()
+
+
+def _drm_vendor_makes(root: str = "/sys/class/drm") -> set[str]:
     vendors = set()
     try:
-        for card in sorted(Path("/sys/class/drm").glob("card[0-9]*")):
+        for card in sorted(Path(root).glob("card[0-9]*")):
+            if "-" not in card.name:
+                try:
+                    vendors.add((card / "device" / "vendor").read_text().strip().lower())
+                except OSError:
+                    continue
+    except OSError:
+        return set()
+    return {backend for vendor, backend in (("0x10de", "cuda"), ("0x1002", "hip"), ("0x8086", "sycl")) if vendor in vendors}
+
+
+def wsl_amd_note(backend: str | None, dev_root: str = "/dev", wsl: bool | None = None) -> str | None:
+    """Under WSL (the GPU is reached through /dev/dxg, there is no /dev/kfd) the Linux AMD (HIP) engines hang: librocdxg 1.2.2
+    never completes a barrier-AND packet, so the first GPU command never returns. A plain sentence with one next step for that
+    case, else None. A warning only: the caller goes on (recommend, never force)."""
+    if backend != "hip":
+        return None
+    if wsl is None:
+        import platform
+        import sys
+        wsl = sys.platform.startswith("linux") and "microsoft" in platform.uname().release.lower()
+    if not wsl or not Path(dev_root, "dxg").exists() or Path(dev_root, "kfd").exists():
+        return None
+    return ("The AMD engines do not run under WSL yet: the driver layer WSL uses for the card never finishes a GPU command, so the engine "
+            "would hang at its first step. Use the Strata app or Terminal for Windows, which run the AMD engine directly.")
+
+
+#: The most own memory an integrated GPU reports: its BIOS carve-out (a Raphael iGPU reported 512 MiB, #4971). A card below this is not the one this
+#: PC's engine is chosen for while another card is present. A card that reports no size (NVIDIA and Intel write no such file) is never called integrated
+#: by its missing file; a large unified-memory APU (a Strix Halo with a 32 GiB carve-out) reports a large size and counts as a card.
+INTEGRATED_MAX_VRAM_MIB = 2048
+
+
+def _own_vram(card: Path) -> bool | None:
+    """Whether a display adapter has its own memory above `INTEGRATED_MAX_VRAM_MIB`; None when it reports no size. Read-only sysfs."""
+    try:
+        total = int((card / "device" / "mem_info_vram_total").read_text().strip())
+    except (OSError, ValueError):
+        return None
+    return total > INTEGRATED_MAX_VRAM_MIB * 1024 * 1024
+
+
+def _drm_vendor_backend(root: str = "/sys/class/drm") -> str | None:
+    """Linux without the vendor tools on PATH (a HIP box that runs ROCm from Python wheels has no rocminfo): the PCI
+    vendor of the display adapters decides. NVIDIA 0x10de -> cuda, AMD 0x1002 -> hip, Intel 0x8086 -> sycl, in that
+    order. An integrated GPU does not decide while another make has a card that is not integrated (#4971: a 512 MiB
+    Radeon APU made the whole PC an AMD machine beside the user's Intel Arc); when every card is integrated the old
+    order stands. Read-only sysfs, nothing is run."""
+    if not os.path.isdir(root):
+        return None
+    cards: dict[str, list[bool | None]] = {}
+    try:
+        for card in sorted(Path(root).glob("card[0-9]*")):
             if "-" in card.name:
                 continue
             try:
-                vendors.add((card / "device" / "vendor").read_text().strip().lower())
+                vendor = (card / "device" / "vendor").read_text().strip().lower()
             except OSError:
                 continue
+            cards.setdefault(vendor, []).append(_own_vram(card))
     except OSError:
         return None
-    for vendor, backend in (("0x10de", "cuda"), ("0x1002", "hip"), ("0x8086", "sycl")):
-        if vendor in vendors:
-            return backend
-    return None
+    order = (("0x10de", "cuda"), ("0x1002", "hip"), ("0x8086", "sycl"))
+    if not any(v in cards for v, _ in order):
+        return None
+    # a make whose every card is positively integrated (a small own-memory reading) is skipped while another make has a card that is not
+    decisive = [v for v, _ in order if any(flag is not False for flag in cards.get(v, []))]
+    chosen = decisive[0] if decisive else next(v for v, _ in order if v in cards)
+    return dict(order)[chosen]
 
 
 #: Windows AMD cards by PCI device id (VEN_1002), the same table as setup.py's _WIN_AMD_DID (tests/terminal/test_engine_component.py
@@ -460,9 +701,105 @@ WIN_AMD_IGPU_IDS = {0x150E, 0x1114, 0x1902, 0x15BF, 0x15C8, 0x164F, 0x1900, 0x19
 _WIN_DISPLAY_CLASS = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
 
 
+def gfx_from_name(name: str) -> str:
+    """The AMD architecture a card's marketing name implies ("" when the name says nothing): the fallback when the PCI device id is
+    not in the table. Only names Strata knows a gfx for; an integrated Radeon with no supported build still maps (it then simply
+    fits no package)."""
+    text = re.sub(r"\s+", " ", str(name or "")).upper()
+    if "AMD" not in text and "RADEON" not in text and "RYZEN" not in text:
+        return ""
+    if re.search(r"\b(?:8060S|8050S)\b", text) or "RYZEN AI MAX" in text:
+        return "gfx1151"
+    if re.search(r"\bR9700\b|\bR97\d\d\b|\bAI PRO R97", text) or re.search(r"\bRX 9070\b", text):
+        return "gfx1201"
+    if re.search(r"\bRX 906\d\b|\bR96\d\d\b|\bAI PRO R96", text):
+        return "gfx1200"
+    found = re.search(r"\b(?:RX |W)(7[5-9]\d\d)\b", text)
+    if found:
+        series = int(found.group(1)) // 100
+        return {79: "gfx1100", 78: "gfx1101", 77: "gfx1101", 76: "gfx1102", 75: "gfx1102"}[series]
+    if re.search(r"\b(?:780M|760M|740M)\b", text):
+        return "gfx1103"
+    if re.search(r"\b(?:880M|890M)\b", text):
+        return "gfx1150"
+    if re.search(r"\b860M\b", text):
+        return "gfx1152"
+    found = re.search(r"\bRX (6\d{3})\b", text)
+    if found:
+        number = int(found.group(1))
+        if number >= 6800:
+            return "gfx1030"
+        if number in (6700, 6750) or "6700 XT" in text:
+            return "gfx1031"
+        if 6600 <= number < 6700:
+            return "gfx1032"
+        if number in (6500, 6400):
+            return "gfx1034"
+    return ""
+
+
+_CIM_CACHE: dict = {}
+CIM_CACHE_SECONDS = 120.0        # one answer (a failed or timed-out one too) serves every caller of this process for this long
+
+
+def _windows_adapters_cim() -> list[dict]:
+    """The CIM query below, asked once per process and 2 minutes: one `strata launch --plan` asked it 18 times (17 s on a healthy PC) and, with the WMI
+    service stuck, 18 times its 15 s timeout, far beyond the 60 s the app waits for Control (#4975). The adapters do not change inside a command."""
+    if os.name != "nt":
+        return []
+    now = time.monotonic()
+    hit = _CIM_CACHE.get("adapters")
+    if hit is not None and now - hit[0] < CIM_CACHE_SECONDS:
+        return [dict(a) for a in hit[1]]
+    found = _windows_adapters_cim_query()
+    _CIM_CACHE["adapters"] = (now, found)
+    return [dict(a) for a in found]
+
+
+def _windows_adapters_cim_query() -> list[dict]:
+    """Second source when the registry key lists nothing: PowerShell's Win32_VideoController (PNPDeviceID has VEN_/DEV_). It can fail for
+    a limited account, so every failure is an empty answer."""
+    if os.name != "nt":
+        return []
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if not shell:
+        return []
+    try:
+        done = subprocess.run([shell, "-NoProfile", "-NonInteractive", "-Command",
+                               "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-CimInstance Win32_VideoController | ForEach-Object { $_.PNPDeviceID + '|' + $_.Name + '|' + $_.AdapterRAM }"],
+                              capture_output=True, text=True, errors="replace", timeout=15, stdin=subprocess.DEVNULL,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found = []
+    for line in (done.stdout or "").splitlines():
+        match = re.search(r"VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})", line, re.I)
+        if not match:
+            continue
+        parts = line.split("|")
+        ram = int(parts[2]) if len(parts) > 2 and parts[2].strip().isdigit() else 0
+        found.append({"vendor": match.group(1).lower(), "device": int(match.group(2), 16),
+                      "name": parts[1].strip() if len(parts) > 1 else "",
+                      "vram_gb": (ram / 2 ** 30) if ram > 0 else 0.0})
+    return found
+
+
 def windows_display_adapters() -> list[dict]:
-    """The display adapters Windows has a driver for (the display-class registry key, readable without admin and without running
-    anything): {"vendor": "10de"|"1002"|"8086"|..., "device": int, "name", "vram_gb"}. Empty off Windows or when it cannot be read."""
+    """The display adapters Windows has a driver for: the display-class registry key (readable without admin and without running
+    anything), then Win32_VideoController when the key lists nothing: {"vendor": "10de"|"1002"|"8086"|..., "device": int, "name",
+    "vram_gb"}. Empty off Windows or when neither can be read."""
+    found = _windows_display_adapters_registry()
+    if len({a.get("vendor") for a in found} & {"10de", "1002"}) > 1:
+        # The registry keeps the driver entry of a card that was taken out (an NVIDIA card swapped for a Radeon, #3892): when two makes are
+        # listed, only the adapters Windows reports as present now count.
+        present = {(a["vendor"], a["device"]) for a in _windows_adapters_cim()}
+        now = [a for a in found if (a["vendor"], a["device"]) in present]
+        if now:
+            return now
+    return found or _windows_adapters_cim()
+
+
+def _windows_display_adapters_registry() -> list[dict]:
     found: list[dict] = []
     try:
         import winreg
@@ -509,6 +846,11 @@ def windows_amd_cards(adapters: list[dict] | None = None) -> list[dict]:
             continue
         device = adapter.get("device")
         arch = WIN_AMD_DEVICE_ARCH.get(device) or WIN_AMD_UMA_IDS.get(device) or ""
+        if not arch and device not in WIN_AMD_IGPU_IDS:
+            guess = gfx_from_name(adapter.get("name", ""))              # a card whose id is not in the table: its name says
+            if guess in ("gfx1103", "gfx1150", "gfx1152"):               # (those are integrated Radeons)
+                continue
+            arch = guess
         if not arch and (device in WIN_AMD_IGPU_IDS or float(adapter.get("vram_gb") or 0) < 3.0):
             continue                                                    # an integrated Radeon (512 MB of carve-out)
         cards.append({"arch": arch, "name": adapter.get("name", ""), "device": device})
@@ -561,16 +903,66 @@ def hip_archs_present(kfd_root: str | None = None) -> list[str]:
     return found
 
 
+def hip_archs_from_pci(drm_root: str = "/sys/class/drm", lspci: bool = True) -> list[str]:
+    """Linux, third probe for the AMD architectures when the kernel driver's topology (hip_archs_present) and rocminfo said nothing (no
+    /sys/class/kfd access in an AppImage or a container, no ROCm tools installed): the PCI ids of the AMD display devices, in sysfs
+    (``card0/device/{vendor,device}``) and then ``lspci -nn`` (``[1002:744c]``), mapped through the same tables the Windows probe uses.
+    An integrated Radeon and an id the tables do not know give nothing. Read-only; empty when it cannot say."""
+    ids: list[int] = []
+    try:
+        for card in sorted(Path(drm_root).glob("card[0-9]*")):
+            if "-" in card.name:                                            # card0-DP-1 and the like are connectors
+                continue
+            try:
+                vendor = (card / "device" / "vendor").read_text().strip().lower()
+                device = (card / "device" / "device").read_text().strip().lower()
+            except OSError:
+                continue
+            if vendor == "0x1002" and device.startswith("0x"):
+                ids.append(int(device, 16))
+    except OSError:
+        pass
+    if not ids and lspci and os.name != "nt":
+        tool = shutil.which("lspci")
+        if tool:
+            try:
+                done = subprocess.run([tool, "-nn"], capture_output=True, text=True, errors="replace", timeout=10)
+                for line in (done.stdout or "").splitlines():
+                    if re.search(r"VGA|Display|3D", line):
+                        found = re.search(r"\[1002:([0-9a-f]{4})\]", line, re.I)
+                        if found:
+                            ids.append(int(found.group(1), 16))
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return sorted({WIN_AMD_DEVICE_ARCH.get(i) or WIN_AMD_UMA_IDS.get(i) or "" for i in ids} - {""})
+
+
+_SMI_CACHE: dict = {}
+SMI_CACHE_SECONDS = 30.0         # a card's capability and the driver version do not change inside one command
+
+
 def _smi_query(field_name: str) -> list[str]:
+    """nvidia-smi for one field, asked once per process and 30 s: one `strata launch --plan` on Windows with an engine installed started it 19 times (10 for the
+    compute capability, 9 for the driver version), and a stuck driver would have cost its 8 s timeout each time. A failed answer is kept for the same time."""
+    now = time.monotonic()
+    hit = _SMI_CACHE.get(field_name)
+    if hit is not None and now - hit[0] < SMI_CACHE_SECONDS:
+        return list(hit[1])
+    found = _smi_query_now(field_name)
+    _SMI_CACHE[field_name] = (now, found)
+    return list(found)
+
+
+def _smi_query_now(field_name: str) -> list[str]:
     tool = shutil.which("nvidia-smi")
     if not tool:
         return []
     try:
         done = subprocess.run([tool, f"--query-gpu={field_name}", "--format=csv,noheader"], capture_output=True,
-                              timeout=8, text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                              timeout=8, text=True, errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.SubprocessError):
         return []
-    return [line.strip() for line in done.stdout.splitlines() if line.strip()] if done.returncode == 0 else []
+    return [line.strip() for line in (done.stdout or "").splitlines() if line.strip()] if done.returncode == 0 and done.stdout else []
 
 
 def nvidia_driver_version() -> str | None:
@@ -585,27 +977,44 @@ def nvidia_driver_version() -> str | None:
     return min(versions, key=_version_key) if versions else None
 
 
+def _capability(number: str) -> tuple[int, int]:
+    """``86`` -> (8, 6), ``120`` -> (12, 0): the last digit is the minor version."""
+    return int(number[:-1] or 0), int(number[-1])
+
+
 def arch_covers(archs, present: list[str]) -> bool:
     """Whether a build with `archs` (``sm_86`` = machine code for that card, ``compute_89`` = PTX that any card of
-    that generation or newer can JIT) can run on at least one of the `present` cards (``sm_XX``)."""
-    cards = {int(item[3:]) for item in present if item.startswith("sm_") and item[3:].isdigit()}
+    that generation or newer can JIT) can run on at least one of the `present` cards (``sm_XX``).
+    Machine code also runs on a card of the same major version with an equal or newer minor version (CUDA's cubin
+    compatibility rule): ``sm_86`` code runs on an ``sm_89`` card (RTX 40) but not on ``sm_80`` (older minor),
+    ``sm_90`` (other major) or ``sm_75``; ``sm_120`` code runs on ``sm_121``."""
+    cards = {item[3:] for item in present if item.startswith("sm_") and item[3:].isdigit()}
     if not cards:
         return True              # cannot tell: not a refusal
     for arch in archs:
         kind, _, number = arch.partition("_")
         if not number.isdigit():
             continue
-        if kind == "sm" and int(number) in cards:
+        if kind == "sm" and any(number == card or (len(number) > 1 and len(card) > 1 and _capability(card)[0] == _capability(number)[0]
+                                                   and _capability(card)[1] >= _capability(number)[1]) for card in cards):
             return True
-        if kind == "compute" and any(card >= int(number) for card in cards):
+        if kind == "compute" and any(int(card) >= int(number) for card in cards):
             return True
     return False
 
 
+def arch_native(archs, present: list[str]) -> bool:
+    """Whether a build with `archs` holds machine code made for one of the `present` cards itself (``sm_89`` on an ``sm_89`` card),
+    not only code that runs there through the same-major rule of `arch_covers` (``sm_86`` on an RTX 40) or as PTX. Only a tie-breaker
+    between packages that fit equally: a package with the card's own image is taken first (#3935)."""
+    cards = {item[3:] for item in present if item.startswith("sm_") and item[3:].isdigit()}
+    return any(arch.startswith("sm_") and arch[3:] in cards for arch in archs)
+
+
 # ----------------------------------------------------------------------------------------------- resolve
 
-def scan(root: Path | None = None) -> tuple[list[EngineComponent], list[dict]]:
-    """Every readable engine package in the folder, and the ones that were not (with the reason)."""
+def scan(root: Path | None = None, component_id: str = COMPONENT_ID) -> tuple[list[EngineComponent], list[dict]]:
+    """Every readable engine package in the folder, and the ones that were not (with the reason). `component_id`: see read_manifest."""
     folder = engine_dir(root)
     found, problems = [], []
     try:
@@ -614,7 +1023,7 @@ def scan(root: Path | None = None) -> tuple[list[EngineComponent], list[dict]]:
         return [], []
     for entry in entries[:64]:
         try:
-            found.append(read_manifest(entry))
+            found.append(read_manifest(entry, component_id))
         except ComponentProblem as exc:
             problems.append({"folder": str(entry), "problem": str(exc)})
     return found, problems
@@ -638,8 +1047,32 @@ def hip_family(arch: str) -> str:
     return next((name for name, archs in HIP_FAMILIES if arch in archs), arch)
 
 
+#: AMD architectures no ready-made engine package of this release covers. Empty since 0.2.2: the RX 6000 series (gfx1030 / gfx1031) has
+#: its own package (Linux `rx6000`, Windows `rdna2`; built, not tested on a real RX 6000 card). The mechanism stays for the next card family
+#: that has none: a family in this table gets the plain "no ready-made engine" line instead of "Ask for the X build".
+NO_PACKAGE_HIP: dict[str, str] = {}
+NO_PACKAGE_SENTENCE = ("This release has no ready-made Strata engine for the AMD {0} series. Strata can only run on it with an engine built for "
+                       "that card (docs/AMD_HIP.md, \"RDNA2\").")
+
+
+def no_package_note(archs) -> str | None:
+    """One plain sentence when some of these architectures (gfx1030 ...) have no ready-made package in this release, else None."""
+    families = sorted({NO_PACKAGE_HIP[a] for a in archs if a in NO_PACKAGE_HIP})
+    return NO_PACKAGE_SENTENCE.format(" and ".join(families)) if families else None
+
+
+def hip_preference(archs) -> int:
+    """Tie-break between two AMD engine packages of one version that both cover a PC (a computer with an RX 7900 beside an RX 6800): the
+    RX 6000 package (gfx103x code only) never wins over another family's, so adding it changed nothing for a PC that was served before."""
+    archs = [str(a) for a in archs or ()]
+    return 0 if archs and all(a.startswith("gfx103") for a in archs) else 1
+
+
 def arch_notice(built: tuple[str, ...], here: list[str]) -> str:
     """The plain sentence for an AMD engine that has code for other cards than this computer's (a tester build for another card)."""
+    if here and all(a in NO_PACKAGE_HIP for a in here):      # asking for "the RX 6000 build" would send the person to one that does not exist
+        have = sorted({hip_family(a) for a in here})
+        return (f"This computer has an AMD {' and '.join(have)} card ({', '.join(sorted(set(here)))}). {no_package_note(here)}")
     built_for = sorted({hip_family(a) for a in built})
     have = sorted({hip_family(a) for a in here})
     make = lambda names: " and ".join(names)  # noqa: E731
@@ -647,13 +1080,25 @@ def arch_notice(built: tuple[str, ...], here: list[str]) -> str:
             f"Ask for the {make(have)} build.")
 
 
+RELEASES_URL = "https://github.com/Niko1221/Strata/releases"
+MAKE_NAMES = {"cuda": "NVIDIA", "hip": "AMD", "sycl": "Intel"}
+
+
+def wrong_make_notice(built: str, archs: tuple[str, ...], here: str) -> str:
+    """The plain sentence for a build made for another make of graphics card than this computer has (an AMD build on an NVIDIA PC)."""
+    families = sorted({hip_family(a) for a in archs if any(a in group for _, group in HIP_FAMILIES)})
+    built_for = f"AMD {' and '.join(families)}" if built == "hip" and families else MAKE_NAMES.get(built, built)
+    make = MAKE_NAMES.get(here, here)
+    return f"This Strata is for {built_for} cards. Your PC has an {make} card: download the {make} version from {RELEASES_URL}"
+
+
 def resolve(root: Path | None = None, *, backend: str | None = None, target: str | None = None,
-            full: bool = False, runtime: str | None = None) -> EngineComponent:
+            full: bool = False, runtime: str | None = None, component_id: str = COMPONENT_ID) -> EngineComponent:
     """The engine to start on this machine, or `EngineMissing` / `EngineIntegrityError`. Never downloads, never creates
     the folder. `full=True` hashes every file (a start does); the default is the quick check the listings use."""
     base = root or components_dir()
     target = target or host_platform()
-    found, problems = scan(base)
+    found, problems = scan(base, component_id)
     if not found and not problems:
         raise EngineMissing("the component folder holds no engine package", base)
     wanted = backend
@@ -714,6 +1159,12 @@ def resolve(root: Path | None = None, *, backend: str | None = None, target: str
         plain = None
         if arch_blocked and len(arch_blocked) == compatible and not broken:      # every engine that fits this PC is built for other cards
             plain = arch_notice(tuple(sorted({a for item in arch_blocked for a in item.hip_archs})), hip_here)
+        if plain is None and not compatible and not broken and wanted in MAKE_NAMES:       # every engine here is for another make of card
+            here_target = [item for item in found if item.platform == target]
+            other = [item for item in here_target if item.backend in MAKE_NAMES and item.backend != wanted]
+            if other and len(other) == len(here_target):
+                top = max(other, key=lambda item: _version_key(item.version))
+                plain = wrong_make_notice(top.backend, top.archs, wanted)
         missing = EngineMissing("; ".join(everything) or "nothing matched", base, problems=problems, notice=plain)
         if driver_blocked and len(driver_blocked) == compatible and not broken:
             # the only thing in the way is the NVIDIA driver: one plain line that names the version to install
@@ -725,7 +1176,8 @@ def resolve(root: Path | None = None, *, backend: str | None = None, target: str
             if item.root.name == pin:
                 return item
     # newest version first; with equal versions the build for the newer driver (the CUDA 13 build beside the CUDA 12 one)
-    return max(usable, key=lambda item: (_version_key(item.version), _version_key(item.min_driver.get("nvidia", "0"))))
+    return max(usable, key=lambda item: (_version_key(item.version), _version_key(item.min_driver.get("nvidia", "0")),
+                                         hip_preference(item.hip_archs), arch_native(item.cuda_archs, archs_here)))
 
 
 #: A run config can name its engine as "component:strata-engine" instead of a path: the server then asks the
@@ -744,9 +1196,18 @@ def expand(value: str, cfg: dict | None = None, *, root: Path | None = None, ful
     if not is_reference(value):
         return value
     name = value[len(REFERENCE_PREFIX):]
-    if name not in ("", COMPONENT_ID):
-        raise EngineMissing(f"the run config names an unknown component {name!r}", root or components_dir())
     backend = (cfg or {}).get("backend")
+    if name not in ("", COMPONENT_ID):
+        from strata_control import shape_engine
+        shape = shape_engine.shape_of_component(name)
+        if shape is None:
+            raise EngineMissing(f"the run config names an unknown component {name!r}", root or components_dir())
+        try:                                              # the engine of a model shape: its own folder, never the Strata engine's
+            return str(resolve(shape_engine.root(shape, root), backend=backend if backend in BACKEND_MATRIX else None, full=full, component_id=name).exe)
+        except EngineIntegrityError:
+            raise
+        except EngineMissing as exc:
+            raise shape_engine.ShapeEngineMissing(shape, exc.reason, shape_engine.root(shape, root), problems=exc.problems, title=(cfg or {}).get("shape_title")) from None
     return str(resolve(root, backend=backend if backend in BACKEND_MATRIX else None, full=full).exe)
 
 
@@ -762,11 +1223,19 @@ def status(root: Path | None = None, *, backend: str | None = None, full: bool =
               "backend": backend or detected, "backend_source": "requested" if backend else how,
               "installed": [item.to_dict() for item in found], "problems": problems,
               "engine": None, "usable": False, "notice": None, "acquires": False,
-              "pinned": pinned_folder(base), "previous": previous_folder(base), "update_notice": cached_notice(base)}
+              "pinned": pinned_folder(base), "previous": previous_folder(base), "update_notice": cached_notice(base),
+              "update_available": cached_offers(base)}
     try:
         chosen = resolve(base, backend=backend, full=full)
         report["engine"] = chosen.to_dict()
         report["usable"] = True
     except EngineMissing as exc:
         report["notice"] = getattr(exc, "driver_notice", None) or getattr(exc, "plain_notice", None) or str(exc)
+    try:                                              # the engines of model shapes (strata_control/shape_engine.py): reported only when this PC has one
+        from strata_control import shape_engine
+        shapes = shape_engine.status(root)
+        if shapes:
+            report["shapes"] = shapes
+    except Exception:                                 # noqa: BLE001 - informational only
+        pass
     return report

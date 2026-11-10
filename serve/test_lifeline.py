@@ -30,9 +30,18 @@ class PortableIdentity(unittest.TestCase):
         # Compile only the watcher's pure identity reader, not its signal/pipe loop.
         function = next(node for node in ast.parse(lifeline._WATCHER).body
                         if isinstance(node, ast.FunctionDef) and node.name == "start_of")
-        namespace = {"subprocess": subprocess}
+        namespace = {"subprocess": subprocess, "os": os}
         exec(compile(ast.Module(body=[function], type_ignores=[]), "watcher-identity", "exec"), namespace)
-        return ((lifeline._start_token, ""), (namespace["start_of"], None))
+        def ps_fallback(reader):
+            def read(pid):
+                # These tests exercise ps state changes, independently of the host's procfs or PID 123.
+                with mock.patch.object(sys, "platform", "darwin"), \
+                     mock.patch.object(os.path, "exists", return_value=False), \
+                     mock.patch("builtins.open", side_effect=FileNotFoundError):
+                    return reader(pid)
+            read.__name__ = reader.__name__
+            return read
+        return ((ps_fallback(lifeline._start_token), ""), (ps_fallback(namespace["start_of"]), None))
 
     def test_identity_survives_process_state_changes(self):
         for reader, _ in self.readers():
@@ -136,6 +145,45 @@ class Lifeline(unittest.TestCase):
     @unittest.skipUnless(POSIX, "the portable watcher is the POSIX path")
     def test_the_portable_watcher_ends_the_child_when_the_server_is_killed(self):
         self.assertEqual(self._killed_parent_takes_the_child(STRATA_LIFELINE="watcher"), "watcher")
+
+    @unittest.skipUnless(POSIX, "the portable watcher is the POSIX path")
+    def test_the_watcher_token_does_not_change_with_the_child_state(self):
+        """The watcher's token has to be the child's START TIME, and nothing that moves while it runs.
+
+        The token used to come from `ps -o lstart=,stat=`, so it carried the state character as well.  A child
+        is R (running) for the first milliseconds of its life and then settles to S (sleeping); the token is
+        taken right after `popen`, so the watcher then compared 'S' against its 'R' token, decided the child
+        was not the one it had been told about, and exited WITHOUT signalling it.  That is the "child outlived
+        a killed server" failure, and it appeared or vanished depending on which state the spawn was sampled
+        in - which is why it read as a flake.  Sampled while the child spins (R) and again while it sleeps
+        (S), the token must be the same either way.
+        """
+        from serve import lifeline
+        from unittest import mock
+        # in-process popen() means procs.write_record() would use the REAL per-user state dir; setUp's env only
+        # reaches subprocesses. Keep this test's launch record in the temp dir like the other cases.
+        with mock.patch.dict(os.environ, {"XDG_STATE_HOME": self.temp.name, "LOCALAPPDATA": self.temp.name}):
+            child = lifeline.popen([sys.executable, "-c",
+                                    "import time\nend = time.time() + 1.5\nwhile time.time() < end:\n    pass\n"
+                                    "time.sleep(30)"], "engine")
+        self.spawned.append(child.pid)
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+
+        def state():
+            """The child's state character, read independently of the code under test ('R' running, 'S' asleep)."""
+            out = subprocess.run(["ps", "-o", "stat=", "-p", str(child.pid)], capture_output=True, text=True).stdout
+            return out.strip()[:1]
+
+        while_spinning = lifeline._start_token(child.pid)
+        spinning_state = state()
+        time.sleep(2.0)                                        # asleep by now
+        while_sleeping = lifeline._start_token(child.pid)
+        sleeping_state = state()
+        self.assertEqual((spinning_state, sleeping_state), ("R", "S"),
+                         "the child did not go from running to sleeping, so this proves nothing about the token")
+        self.assertTrue(while_spinning and while_sleeping, (while_spinning, while_sleeping))
+        self.assertEqual(while_spinning, while_sleeping,
+                         "the token moved with the child's state, so the watcher would skip the kill")
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "PR_SET_PDEATHSIG is Linux")
     def test_a_child_started_on_a_request_thread_outlives_that_thread_but_not_the_server(self):

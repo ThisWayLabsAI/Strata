@@ -12,6 +12,56 @@ from serve.test_model_registry import service
 
 
 class ForkUpstreamIntegration(unittest.TestCase):
+    def test_installed_factory_applies_offline_policy_to_engine_and_vision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            for name, text in {"vocab.json": '{"a": 0}', "merges.txt": "", "token_type.json": "[1]",
+                               "chat_template.jinja": "{{ messages }}"}.items():
+                (folder / name).write_text(text, encoding="utf-8")
+            profile = {"exe": "engine.exe", "args": [], "tokenizer": str(folder), "cwd": str(folder),
+                       "env": {"HF_HUB_OFFLINE": "0"},
+                       "vision": {"exe": "vision.exe", "model": "model.gguf", "mmproj": "projector.gguf"}}
+            with mock.patch("serve.model_registry.installed_profile"), \
+                 mock.patch("strata_tokenizer.Tokenizer", return_value=server.ByteTokenizer()), \
+                 mock.patch.object(server, "effort_end_args", return_value=[]), \
+                 mock.patch.object(server, "StrataEngine", return_value=service().engine) as engine, \
+                 mock.patch.object(server, "Vision") as vision:
+                result = server.installed_model_service("original", profile, offline=True)
+            self.assertTrue(result.offline)
+            self.assertEqual(engine.call_args.kwargs["env"]["HF_HUB_OFFLINE"], "1")
+            self.assertEqual(vision.call_args.kwargs["env"]["HF_HUB_OFFLINE"], "1")
+            self.assertTrue(engine.call_args.kwargs["lazy"])
+            self.assertTrue(vision.call_args.kwargs["lazy"])
+
+    def test_registry_vision_defaults_do_not_drift_from_installed_profiles(self):
+        import copy
+        cfg = {"model_registry": {"original": {}}, "backend": "cuda",
+               "vision": {"gpu": True, "exe": "strata-vision.exe"},
+               "args": ["--vram-reserve-mib", "700"]}
+        before = copy.deepcopy(cfg)
+        self.assertTrue(server.vision_on_demand_by_default(cfg))
+        self.assertEqual(server.apply_vision_defaults(cfg), before)
+
+    def test_switch_replaces_template_parser_and_restores_it_after_load_failure(self):
+        svc = service()
+        original_parser = svc.parser_cls
+        candidate = service("sc117")
+        candidate.parser_cls = type("DifferentTemplateParser", (), {})
+        registry = Registry(svc, {"original": {}, "sc117": {}}, lambda *_: candidate)
+        registry.switch("sc117")
+        self.assertIs(svc.parser_cls, candidate.parser_cls)
+        svc.engine.unload()
+        previous = service("original")
+        previous.parser_cls = original_parser
+        previous.engine.unload()
+        previous.engine.restart = mock.Mock(side_effect=RuntimeError("cannot load"))
+        registry.factory = lambda *_: previous
+        from serve.model_registry import RegistryError
+        with self.assertRaises(RegistryError):
+            registry.switch("original")
+        self.assertIs(svc.parser_cls, candidate.parser_cls)
+        registry.close()
+
     def test_registry_budget_default_and_explicit_overrides(self):
         registry = {"model_registry": {"original": {}}}
         self.assertFalse(server.fit_max_tokens_of(registry))
@@ -45,6 +95,11 @@ class ForkUpstreamIntegration(unittest.TestCase):
             def registry(svc, cfg, factory):
                 seen["svc"] = svc
                 self.assertFalse(svc.fit_max_tokens)
+                self.assertTrue(svc.offline)
+                replacement = service("sc117", 4096)
+                with mock.patch.object(server, "installed_model_service", return_value=replacement) as prepare:
+                    self.assertIs(factory("sc117", {}), replacement)
+                    prepare.assert_called_once_with("sc117", {}, offline=True)
                 return Registry(svc, {"original": {"max_context": 8192}, "sc117": {"max_context": 4096}},
                                 lambda name, entry: service(name, entry["max_context"]))
 
@@ -65,7 +120,7 @@ class ForkUpstreamIntegration(unittest.TestCase):
                  mock.patch.object(server.lifeline, "install_stop_handlers"), \
                  mock.patch("strata_control.private_files.adopt_user_defaults"), \
                  mock.patch.dict(os.environ, {"STRATA_API_KEY": "fixture-key"}):
-                code = server.main(["--engine", "mock", "--config", str(config), "--port", "0",
+                code = server.main(["--engine", "mock", "--offline", "--config", str(config), "--port", "0",
                                     "--ready-file", str(ready_path), "--shutdown-timeout", "0"],
                                    lifecycle_event=lambda kind, payload: events.append((kind, payload)))
             self.assertEqual(code, 0)

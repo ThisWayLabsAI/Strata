@@ -31,13 +31,13 @@ class ChatEditing(chat_baseline.ChatImages):
         self.svc.images.policy = "unload"
         inputs = self.request(references=[selected(), selected("style-2", "style")])
         captured = []
-        def args(cfg, job, out):
+        def args(cfg, job, out, prompt_file):
             self.assertFalse(self.engine.generating)
             self.assertTrue(self.svc.fifo.locked())
             self.assertIn("Image 1: source", job["prompt"])
             self.assertIn("Image 2: style", job["prompt"])
             captured.extend(Path(path).read_bytes() for path in job["reference_paths"])
-            return baseline.fake_args(cfg, job, out)
+            return baseline.fake_args(cfg, job, out, prompt_file)
         with mock.patch.object(images, "sd_cli_args", args):
             code, body = self.post(strata_images=True, strata_image_request=inputs)
         self.assertEqual(code, 200, body)
