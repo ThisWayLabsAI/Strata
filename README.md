@@ -26,7 +26,7 @@
 **Free, open source, and yours to run.** Use Strata on your desktop or with your favorite coding tools. No account needed.
 
 ThisWayLabs fork maintenance: [workflow](docs/FORK_WORKFLOW.md), [current deployment](docs/THISWAYLABS_HANDOFF.md),
-and [upstream 0.1.45 assessment](docs/UPSTREAM_REVIEW_2026-10-17.md).
+and [upstream integration candidate](docs/UPSTREAM_INTEGRATION_2026-11-10.md).
 
 ## Models
 
