@@ -20,6 +20,7 @@ from serve.server import ByteTokenizer, MockEngine, Service, serve
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(__file__).parent / "web"
+FORK_LIBRARY = (WEB / "chat-threads.js").is_file()
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed")
@@ -39,6 +40,12 @@ class OffIsThePageFromBefore(unittest.TestCase):
         cls.store = (WEB / "chatstore.js").read_text(encoding="utf-8")
 
     def test_the_three_switches_start_off(self):
+        if FORK_LIBRARY:
+            self.assertIn('src="web/chat-threads.js"', self.html)
+            self.assertNotIn('src="web/chats-ui.js"', self.html)
+            for control in ('id="s-list"', 'id="s-edit"', 'id="s-busy"'):
+                self.assertNotIn(control, self.html)
+            return
         self.assertIn('chatList: false, chatEdit: false, whileBusy: "wait"', self.app)
         for el in ("s-list", "s-edit"):
             self.assertIn('aria-checked="false"', re.search(rf'<button[^>]*id="{el}"[^>]*>', self.html).group(0))
@@ -50,7 +57,11 @@ class OffIsThePageFromBefore(unittest.TestCase):
         self.assertRegex(self.ui, r"async function openChats\(fromScreen\) \{\s*await chatStore\.start\(\);")
         self.assertEqual(len(re.findall(r"\bopenChats\(", self.ui)), 2)       # its definition and the one call, in setChatList
         self.assertNotIn("indexedDB", self.app, "the page's main script never touches the store")
-        self.assertIn("if (settings.chatList) await setChatList(true, false);", self.app)
+        if FORK_LIBRARY:
+            self.assertIn("initializeThreads()", self.app)
+            self.assertNotIn("initChats()", self.app)
+        else:
+            self.assertIn("if (settings.chatList) await setChatList(true, false);", self.app)
 
     def test_with_the_list_off_one_chat_is_kept_as_before(self):
         self.assertIn('if (!listOn) { store.set("chat", H.cleanMessages(messages)); return; }', self.ui)
@@ -68,14 +79,22 @@ class OffIsThePageFromBefore(unittest.TestCase):
 
     def test_the_edit_controls_wait_for_a_finished_answer(self):
         self.assertIn("const historyLocked = () => !!busy || !!panel || !!pending;", self.ui)
-        self.assertIn("$(\"s-list\").disabled = $(\"s-edit\").disabled = !!busy || !!panel;", self.app)
+        if FORK_LIBRARY:
+            self.assertIn("if (!threadsReady || threadTransition || busy || attachmentReads)", self.app)
+        else:
+            self.assertIn("$(\"s-list\").disabled = $(\"s-edit\").disabled = !!busy || !!panel;", self.app)
 
+    @unittest.skipIf(FORK_LIBRARY, "upstream interruption UI is not enabled with the fork's private chat store")
     def test_an_interrupted_answer_keeps_what_was_written(self):
         self.assertIn("if (cut) m.interrupted = true;", self.app)
         self.assertIn("busy.cutAfterTool = true; return; }   // let the tool finish", self.app)
         self.assertIn("settlePending(cut, !m.stopped && !m.error);", self.app)
 
     def test_sending_while_busy_parks_nothing_unless_asked(self):
+        if FORK_LIBRARY:
+            self.assertIn("|| busy || attachmentReads || threadTransition || !threadsReady) return;", self.app)
+            self.assertNotIn("function park(", self.app)
+            return
         self.assertIn('const parksWhileBusy = () => settings.whileBusy === "queue" || settings.whileBusy === "interject";', self.app)
         self.assertIn("if (!parksWhileBusy()) return;", self.app)
 

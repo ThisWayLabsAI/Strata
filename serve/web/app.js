@@ -1312,7 +1312,14 @@ function renderChat() {
   messages.forEach((m, i) => chat.appendChild(msgEl(m, i)));
   scrollDown(true);
 }
-function nearBottom() { const s = $("chat-scroll"); return s.scrollHeight - s.scrollTop - s.clientHeight < 120; }
+let lastReaderInput = 0;
+const FOLLOW_SLACK = 24, FAR_AWAY = 400, INPUT_WINDOW_MS = 400;
+function followAfterScroll(distance, wasFollowing, msSinceInput) {
+  if (distance <= FOLLOW_SLACK) return true;
+  if (msSinceInput <= INPUT_WINDOW_MS || distance > FAR_AWAY) return false;
+  return wasFollowing;
+}
+function nearBottom() { const s = $("chat-scroll"); return s.scrollHeight - s.scrollTop - s.clientHeight <= FOLLOW_SLACK; }
 function rememberReadingPosition() {
   readingAnchor = null;
   if (followLatest) return;
@@ -1322,26 +1329,39 @@ function rememberReadingPosition() {
 }
 function scrollDown(force) {
   const s = $("chat-scroll");
+  if (force) { followLatest = true; readingAnchor = null; }
   if (mobileChat) {
-    if (force) { followLatest = true; readingAnchor = null; }
     if (followLatest) s.scrollTop = s.scrollHeight;
     else if (readingAnchor?.element.isConnected) {
       // Also preserve the reading position in browsers without native scroll anchoring.
       s.scrollTop += readingAnchor.element.getBoundingClientRect().top - s.getBoundingClientRect().top - readingAnchor.offset;
     }
     $("chat-jump").hidden = followLatest || s.scrollHeight <= s.clientHeight;
-  } else if (force || nearBottom()) s.scrollTop = s.scrollHeight;
+  } else if (followLatest) s.scrollTop = s.scrollHeight;
 }
 function scheduleChatScroll() {
   if (chatScrollFrame) return;
   chatScrollFrame = requestAnimationFrame(() => { chatScrollFrame = 0; scrollDown(); });
 }
-$("chat-scroll").addEventListener("scroll", () => {
-  if (!mobileChat) return;
-  followLatest = nearBottom();
-  rememberReadingPosition();
-  $("chat-jump").hidden = followLatest;
-}, {passive: true});
+(function watchReader() {
+  const s = $("chat-scroll");
+  const touch = () => { lastReaderInput = Date.now(); };
+  s.addEventListener("wheel", e => {
+    touch();
+    if (e.deltaY < 0 && s.scrollTop > 0) followLatest = false;
+  }, {passive: true});
+  s.addEventListener("touchmove", touch, {passive: true});
+  s.addEventListener("pointerdown", touch, {passive: true});
+  s.addEventListener("keydown", e => {
+    touch();
+    if (["PageUp", "ArrowUp", "Home"].includes(e.key) && e.target === s && s.scrollTop > 0) followLatest = false;
+  });
+  s.addEventListener("scroll", () => {
+    followLatest = followAfterScroll(s.scrollHeight - s.scrollTop - s.clientHeight, followLatest, Date.now() - lastReaderInput);
+    rememberReadingPosition();
+    if (mobileChat) $("chat-jump").hidden = followLatest;
+  }, {passive: true});
+})();
 $("jump-latest").onclick = () => { scrollDown(true); };
 // ResizeObserver catches delayed image loads, tool panels and composer growth as well as tokens.
 if (typeof ResizeObserver !== "undefined") {
@@ -1939,6 +1959,7 @@ async function start() {
     setComposerCollapsed(false);
   }
   showTab(location.hash.slice(1) || "chat");
+  if (startQuestion && tab === "chat") $("input").focus();
   poll();
   requestAnimationFrame(fitHeader);
 }

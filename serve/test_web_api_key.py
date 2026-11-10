@@ -22,6 +22,8 @@ class WebApiKey(unittest.TestCase):
 const data = new Map(Object.entries({json.dumps(stored or {})}));
 const field = {{value: ""}};
 const notices = [];
+const events = {{}};
+const window = {{addEventListener: (name, handler) => events[name] = handler}};
 const $ = () => field;
 const toast = (...args) => notices.push(args);
 const localStorage = {{
@@ -93,6 +95,14 @@ console.log(JSON.stringify({before, kinds: notices.map(n => n[0])}));
     def test_server_without_key_keeps_json_header_only(self):
         got = self.run_js('console.log(JSON.stringify(headers(true)));')
         self.assertEqual(got, {"Content-Type": "application/json"})
+
+    def test_cross_tab_key_change_updates_memory_and_field(self):
+        got = self.run_js('''
+data.set("strata.apikey", '"other-tab-key"');
+events.storage({storageArea: localStorage, key: "strata.apikey"});
+console.log(JSON.stringify({headers: headers(), value: field.value}));
+''')
+        self.assertEqual(got, {"headers": {"Authorization": "Bearer other-tab-key"}, "value": "other-tab-key"})
 
 
 if __name__ == "__main__":

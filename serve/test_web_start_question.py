@@ -39,6 +39,7 @@ const location = {
 };
 const history = {replaceState(_s, _t, url) { page.url = new URL(url, page.url); }};
 const innerHeight = 800;
+const mobileChat = false;
 const $ = (id) => (id === "input" ? input : {focus() {}, set value(v) {}, get value() { return ""; }});
 // a credentialed backend: the saved API key and the MCP tools are what a send would use
 async function fetch(path, opts) { calls.push({path: String(path), method: (opts && opts.method) || "GET", auth: !!(opts && opts.headers && opts.headers.Authorization)}); return {ok: true, json: async () => ({})}; }
@@ -52,6 +53,9 @@ function initChats() {}
 async function setChatList() {}
 function setBusy() {}
 function renderChat() {}
+function applyChatLayout() {}
+async function initializeThreads() {}
+function setComposerCollapsed() {}
 function poll() {}
 function fitHeader() {}
 const requestAnimationFrame = () => {};
@@ -81,9 +85,7 @@ class StartQuestion(unittest.TestCase):
     def setUpClass(cls):
         cls.src = APP.read_text(encoding="utf-8")
         cls.start = between(cls.src, "async function start() {", "\nstart();")
-        m = re.search(r"function autosize\(\)[^\n]*", cls.src)
-        assert m, "autosize() is gone"
-        cls.autosize = m.group(0)
+        cls.autosize = between(cls.src, "function autosize()", '\n$("input").addEventListener')
 
     def run_page(self, url):
         js = HARNESS % {"url": json.dumps(url), "start": self.start, "autosize": self.autosize}
@@ -121,7 +123,8 @@ class StartQuestion(unittest.TestCase):
     def test_the_page_never_calls_send_from_the_address(self):
         # the only things that call send() are the composer's own submit and the Enter key
         text = self.src.splitlines()
-        lines = [n for n, line in enumerate(text, 1) if re.search(r"\bsend\(\)", line.split("//")[0])]
+        lines = [n for n, line in enumerate(text, 1) if re.search(r"\bsend\(\)", line.split("//")[0])
+                 and not re.search(r"\bfunction\s+send\(", line)]
         self.assertTrue(lines)
         for n in lines:
             line = text[n - 1]

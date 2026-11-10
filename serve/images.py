@@ -396,7 +396,11 @@ class ImageGen:
                     path.write_bytes(reference["png"])
                     prepared["reference_paths"].append(str(path))
             try:
-                return self._run(prepared, work, cancel)
+                outputs, figures = self._run(prepared, work, cancel)
+                # The temporary reference paths stay on the copy, but response metadata needs the actual alpha result.
+                if "alpha_kept" in prepared:
+                    job["alpha_kept"] = prepared["alpha_kept"]
+                return outputs, figures
             finally:
                 self.progress = None
 
