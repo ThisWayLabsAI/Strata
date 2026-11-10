@@ -9933,7 +9933,7 @@ def fit_max_tokens_of(cfg: dict, enabled=False, disabled=False) -> bool:
     return enabled or (not disabled and cfg.get("fit_max_tokens", default) is not False)
 
 
-def installed_model_service(model, profile):
+def installed_model_service(model, profile, *, offline=False):
     """Prepare a validated replacement entirely on CPU; processes start only after unload."""
     from serve.model_registry import installed_profile
     installed_profile(profile)
@@ -9945,7 +9945,7 @@ def installed_model_service(model, profile):
         tokens[index] = token
     tok = ST.Tokenizer(tokens, (tpath / "merges.txt").read_text(encoding="utf-8").split("\n"),
                        json.loads((tpath / "token_type.json").read_text()))
-    env = child_env(profile)
+    env = child_env(profile, offline=offline)
     base = profile.get("cwd") or "."
     def absolute(value):
         return os.path.abspath(os.path.join(base, value))
@@ -9961,6 +9961,7 @@ def installed_model_service(model, profile):
     result = Service(engine, tok, ChatTemplate(tpath / "chat_template.jinja"), model_name=model,
                      vision=vision, sampling_defaults=sampling_defaults_from_config(profile))
     result.model_arch = profile.get("arch") or "qwen4exp"
+    result.offline = offline
     result.effort_end = bool(effort)
     return result
 
@@ -10587,7 +10588,8 @@ def _main(argv=None, *, lifecycle_event=None, interrupt_exit_code: int = 0) -> i
     if cfg.get("model_registry") is not None:
         from serve.model_registry import from_config
         try:
-            svc.model_registry = from_config(svc, cfg, installed_model_service)
+            svc.model_registry = from_config(svc, cfg,
+                lambda model, profile: installed_model_service(model, profile, offline=svc.offline))
         except (ValueError, KeyError, OSError, TypeError, IndexError) as e:
             raise SystemExit("invalid installed-model registry; check profiles and asset provenance") from e
     svc.api_key = preflight_api_key

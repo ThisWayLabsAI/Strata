@@ -25,6 +25,8 @@ and linked-question safety are included.
 
 - A linked `?q=` question becomes a draft. It never starts inference or tools by itself.
 - Model changes replace the template parser as well as the tokenizer and engine. A failed load restores the previous parser.
+- Model changes forward the service's offline policy into both replacement engine and vision environments. The broader
+  tuning suite caught the missing flag; focused tests now verify the factory receives it and overrides online environment values.
 - Existing registry profiles keep their explicit vision and reserve settings. Applying the new vision defaults only to the
   startup copy would make it differ from the installed profile and from later model switches.
 - Reference paths stay inside a temporary image job. The actual alpha-channel result is copied back for response metadata,
@@ -56,21 +58,29 @@ Passed checks:
 - The broad server run completed with 1,628 passes, 33 skips and 14,416 passing subtests. Its only four failing subcases
   were in the portable identity test harness: the extracted helper lacked `os`, and its ps test needed to isolate the new
   procfs fast path from the host. After that test-only correction, the entire lifecycle file passed: six tests, eight
-  subtests and three stated skips. No runtime change followed the broad run. Its three thread/generator warnings remain
-  in the log and are not described as clean results. The separately run replica stress case accounts for its one deselection.
+  subtests and three stated skips. Its three thread/generator warnings remain in the log and are not described as clean results.
+  The separately run replica stress case accounts for its one deselection. The later offline-policy fix is covered by
+  69 focused registry/offline/restricted-vision tests and 23 subtests, plus the complete six-test factory/integration file.
 - The replica stress case passed alone on unchanged upstream in 116.21 seconds and on the candidate in 117.02 seconds.
   The earlier broad run stalled there and was interrupted; its traceback is retained.
 - Documentation links, release manifest, capability table, benchmark index, settings register and vendored-file checks passed.
 
-The Terminal/control run is being finalized; its results must be recorded before this candidate is described as ready.
-The exhaustive Terminal every-key/every-screen walk was interrupted and remains incomplete. A second full server run
-after the test-only lifecycle correction was not performed; the complete affected file was rerun instead.
+The broader `tests/` run (including Terminal/control/tuning, excluding snapshots and the exhaustive walk) finished with
+3,464 passes, 109 skips, 388 passing subtests, 15 failures and five warnings. One failure identified the missing offline
+flag and is corrected by the focused reruns above. Four shell failures pass with Git Bash. The remaining ten failures
+reproduce on unchanged upstream: three Windows symlink-privilege failures, five Terminal cursor/tuning/theme checks,
+and two preset-name encoding checks. The Terminal/control/tuning source files themselves match the pinned upstream.
+
+The exhaustive Terminal every-key/every-screen walk was interrupted and remains incomplete. A second full server or
+broader suite after the final focused corrections was not performed. This record reports the raw runs and their targeted
+reruns separately; it does not claim a wholly green test matrix.
 
 ### Native execution and live restoration
 
 The native gate ran merge revision `4e290f1a`, using the newly compiled engine and the retained installed vision helper
 and `sd-cli`. It did not install a different helper, image engine, drafter or model. The later follow-up changes image
-response metadata and browser/test/catalog code; its metadata path is covered by the 88-test focused rerun.
+response metadata, browser/test/catalog code and explicit offline-policy forwarding; these paths have focused CPU/browser
+reruns. Native offline-mode execution was not run. The normal online factory path keeps the same default offline=False behavior.
 
 The normal Stop control succeeded after two idle checks. Independent listener and native-worker checks preceded
 candidate startup. The candidate used loopback port 8081, copied configs and a separate image output directory.
@@ -106,6 +116,10 @@ settings were not replaced. Native cancellation and separate new vision-helper v
   this machine's WSL bash cannot start. A rerun with the already-installed Git Bash first on that command's PATH passed
   all 24 shell/Docker/SYCL-guard tests. This resolves the three observed tool-test failures; it does not establish a SYCL
   engine compile result.
+- Four shell failures in the broader suite also pass under Git Bash: Docker syntax, install-script syntax and two SYCL
+  build-status checks. The ten remaining broader-suite failures reproduce on the exact upstream revision in this Windows
+  environment (`upstream-terminal-baseline.log`, `upstream-terminal-theme.log`, `upstream-preset-encoding.log`). They are
+  outstanding upstream/environment limits, not green checks. Do not weaken them or enable administrator startup to hide them.
 - Camera-direction fidelity remains experimental. No comparative speedup or compatibility on untested hardware is claimed.
 
 Do not advance stable or replace live engine/runtime artifacts on the strength of the clean textual merge or local CUDA
