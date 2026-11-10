@@ -12,6 +12,35 @@ from serve.test_model_registry import service
 
 
 class ForkUpstreamIntegration(unittest.TestCase):
+    def test_registry_vision_defaults_do_not_drift_from_installed_profiles(self):
+        import copy
+        cfg = {"model_registry": {"original": {}}, "backend": "cuda",
+               "vision": {"gpu": True, "exe": "strata-vision.exe"},
+               "args": ["--vram-reserve-mib", "700"]}
+        before = copy.deepcopy(cfg)
+        self.assertTrue(server.vision_on_demand_by_default(cfg))
+        self.assertEqual(server.apply_vision_defaults(cfg), before)
+
+    def test_switch_replaces_template_parser_and_restores_it_after_load_failure(self):
+        svc = service()
+        original_parser = svc.parser_cls
+        candidate = service("sc117")
+        candidate.parser_cls = type("DifferentTemplateParser", (), {})
+        registry = Registry(svc, {"original": {}, "sc117": {}}, lambda *_: candidate)
+        registry.switch("sc117")
+        self.assertIs(svc.parser_cls, candidate.parser_cls)
+        svc.engine.unload()
+        previous = service("original")
+        previous.parser_cls = original_parser
+        previous.engine.unload()
+        previous.engine.restart = mock.Mock(side_effect=RuntimeError("cannot load"))
+        registry.factory = lambda *_: previous
+        from serve.model_registry import RegistryError
+        with self.assertRaises(RegistryError):
+            registry.switch("original")
+        self.assertIs(svc.parser_cls, candidate.parser_cls)
+        registry.close()
+
     def test_registry_budget_default_and_explicit_overrides(self):
         registry = {"model_registry": {"original": {}}}
         self.assertFalse(server.fit_max_tokens_of(registry))

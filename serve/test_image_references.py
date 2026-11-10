@@ -78,9 +78,9 @@ class Validation(unittest.TestCase):
         job = images.parse_request({"prompt": "change the sky", "seed": 0}, self.cfg)
         job["references"] = self.parse([reference(), reference("style")])
         captured = []
-        def args(cfg, prepared, out):
+        def args(cfg, prepared, out, prompt_file):
             captured.extend(Path(path).read_bytes() for path in prepared["reference_paths"])
-            command = fake_args(cfg, prepared, out)
+            command = fake_args(cfg, prepared, out, prompt_file)
             self.assertEqual(command.count("-r"), 2)
             self.assertIn("--llm_vision", command)
             return command

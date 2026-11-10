@@ -75,10 +75,8 @@ class Qwen36Entries(unittest.TestCase):
 
     def test_context_recommendation(self):
         fam = setup.OWN_PATH_FAMILIES["qwen36"]
-        self.assertEqual(setup.own_path_context(fam, 12.0), 32768)
-        self.assertEqual(setup.own_path_context(fam, 16.0), 32768)
-        self.assertEqual(setup.own_path_context(fam, 24.0), 65536)
-        self.assertEqual(setup.own_path_context(fam, 32.0), 131072)
+        for vram in (12.0, 16.0, 24.0, 32.0):   # 128K on every card (owner, 2026-11-01; strata_control/default_context.py)
+            self.assertEqual(setup.own_path_context(fam, vram), 131072, vram)
 
 
 class InstallOwnPath(unittest.TestCase):
@@ -101,18 +99,18 @@ class InstallOwnPath(unittest.TestCase):
                     (eng / setup.HVEXE).write_text("x")
             return self.root / "llama", eng, {"version": "0.1.44"}, ["/libs"], gpu, vision
 
-        def write_cfg(path, cfg, source=None):
+        def write_cfg(path, cfg, source=None, explicit=None):
             self.cfg = cfg
             self.calls.append(("config", path.name))
 
         patches = [mock.patch.object(setup, "download", lambda url, dst, what=None: self.calls.append(("get", url, dst))),
-                   mock.patch.object(setup, "verify_sha256", lambda s, size, sha: self.calls.append(("sha", s.name))),
+                   mock.patch.object(setup, "verify_sha256", lambda s, size, sha, own=False: self.calls.append(("sha", s.name))),
                    mock.patch.object(setup, "free_gb", lambda p: 500.0),
                    mock.patch.object(setup, "pip_install", lambda *a, **k: None),
                    mock.patch.object(setup, "engine_step", engine_step),
                    mock.patch.object(setup, "engine_families", lambda e: self.families),
                    mock.patch.object(setup, "run", lambda cmd, **k: self.calls.append(("run", cmd))),
-                   mock.patch.object(setup, "data_folder", lambda d: (self.root / "data", [])),
+                   mock.patch.object(setup, "data_folder", lambda d, *a, **k: (self.root / "data", [])),
                    mock.patch.object(setup, "write_setup_config", write_cfg),
                    mock.patch.object(setup, "write_run_script", lambda tag, p, port, o=True: self.root / f"run-{tag}.sh"),
                    mock.patch.object(setup, "recommend_pool_workers", lambda a: a),
@@ -142,7 +140,7 @@ class InstallOwnPath(unittest.TestCase):
         self.assertTrue(tok and "strata_tokenizer.py" in str(tok[0][1]))
         a = self.cfg["args"]
         self.assertEqual(a[a.index("--native") + 1], str(gguf))
-        self.assertEqual(a[a.index("--max-context") + 1], "32768")   # 16 GB card
+        self.assertEqual(a[a.index("--max-context") + 1], "131072")   # 128K on every card, the 16 GB one too
         self.assertEqual(a[a.index("--mtp") + 1], "2")
         self.assertNotIn("--pack", a)
         self.assertNotIn("--expert-cache", a)
@@ -150,6 +148,25 @@ class InstallOwnPath(unittest.TestCase):
         self.assertEqual(self.cfg["model_name"], "qwen3.6-35b-a3b-ud-q4_k_xl")
         self.assertEqual(Path(self.cfg["exe"]).parent, self.root / "engine")
         self.assertIn(("config", "strata-qwen36-ud-q4_k_xl.json"), self.calls)
+
+    def test_gguf_dir_takes_the_persons_own_files_that_have_no_finish_mark(self):
+        folder = self.root / "own"
+        folder.mkdir()
+        for name in ("Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf", "mmproj-F16.gguf"):
+            (folder / name).write_text("x")                      # no <name>.done: verify_sha256 checks the file and marks it
+        with mock.patch.object(setup, "free_gb", lambda p: 1.0):    # nothing to download: no disk needed
+            rc, out = self.install(model="UD-Q4_K_XL", vision="cpu", gguf_dir=str(folder))
+        self.assertEqual(rc, 0, out)
+        self.assertEqual([c for c in self.calls if c[0] == "get"], [])
+        self.assertIn(("sha", "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"), self.calls)
+        self.assertIn(("sha", "mmproj-F16.gguf"), self.calls)
+
+    def test_gguf_dir_without_the_file_still_says_it_is_missing(self):
+        folder = self.root / "empty"
+        folder.mkdir()
+        rc, out = self.install(model="UD-Q4_K_XL", vision="no", gguf_dir=str(folder))
+        self.assertEqual(rc, 1)
+        self.assertIn("is missing", out)
 
     def test_default_size_follows_the_ram(self):
         rc, out = self.install(ram=64.0)
