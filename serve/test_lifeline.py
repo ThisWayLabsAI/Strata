@@ -30,9 +30,18 @@ class PortableIdentity(unittest.TestCase):
         # Compile only the watcher's pure identity reader, not its signal/pipe loop.
         function = next(node for node in ast.parse(lifeline._WATCHER).body
                         if isinstance(node, ast.FunctionDef) and node.name == "start_of")
-        namespace = {"subprocess": subprocess}
+        namespace = {"subprocess": subprocess, "os": os}
         exec(compile(ast.Module(body=[function], type_ignores=[]), "watcher-identity", "exec"), namespace)
-        return ((lifeline._start_token, ""), (namespace["start_of"], None))
+        def ps_fallback(reader):
+            def read(pid):
+                # These tests exercise ps state changes, independently of the host's procfs or PID 123.
+                with mock.patch.object(sys, "platform", "darwin"), \
+                     mock.patch.object(os.path, "exists", return_value=False), \
+                     mock.patch("builtins.open", side_effect=FileNotFoundError):
+                    return reader(pid)
+            read.__name__ = reader.__name__
+            return read
+        return ((ps_fallback(lifeline._start_token), ""), (ps_fallback(namespace["start_of"]), None))
 
     def test_identity_survives_process_state_changes(self):
         for reader, _ in self.readers():
